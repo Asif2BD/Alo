@@ -1,0 +1,30 @@
+name: PHP compatibility and security regressions
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4', '8.5']
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: shivammathur/setup-php@b604ade2a87db23f8871b7182e69ec5e75effb45 # v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+      - name: Syntax and metric/security logic
+        run: |
+          php -l alo.php
+          php -l tests/render_fixture.php
+          php -d error_reporting=E_ALL tests/run.php
+      - name: Real HTTP and MCP access controls
+        run: python3 tests/test_http.py
+      - name: Restricted hosting fallback
+        run: php -d disable_functions=file_get_contents,sys_getloadavg,disk_total_space,disk_free_space,opcache_get_status alo.php --json | python3 -m json.tool > /dev/null
+      - name: Screenshot fixture smoke check
+        run: php tests/render_fixture.php > /tmp/alo-preview.html

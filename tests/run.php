@@ -1,0 +1,71 @@
+<?php
+declare(strict_types=1);
+define('ALO_TESTING', true);
+require dirname(__DIR__) . '/alo.php';
+$count = 0;
+function check(bool $condition, string $message): void {
+    global $count;
+    ++$count;
+    if (!$condition) { throw new RuntimeException($message); }
+}
+check(Alo\percent(10, 0) === null, 'Zero denominator');
+check(Alo\percent(null, 100) === null, 'Missing value');
+check(Alo\percent(125, 100) === 100.0, 'Bound percentage');
+check(Alo\bytes(1024) === '1.0 KiB', 'Binary units');
+check(Alo\bytes(null) === 'Unavailable', 'Unknown bytes');
+$m = Alo\memoryInfo("MemTotal: 1000 kB\nMemAvailable: 250 kB\nMemFree: 10 kB\nSwapTotal: 100 kB\nSwapFree: 25 kB\n");
+check($m['used_bytes'] === 768000.0 && $m['used_percent'] === 75.0, 'Use available memory not free');
+check($m['swap_used_percent'] === 75.0, 'Swap percentage');
+check(Alo\memoryInfo(null)['total_bytes'] === null, 'Missing procfs');
+check(Alo\memoryInfo("MemTotal: 1000 kB\n")['used_bytes'] === null, 'Missing available memory');
+$a = Alo\cpuTicks("cpu 100 20 30 400 20 10 10 10 50 5\n");
+$b = Alo\cpuTicks("cpu 130 20 40 440 30 10 10 20 80 5\n");
+check($a['total'] === 600.0, 'Exclude duplicate guest ticks');
+check(Alo\cpuUsage($a, $b) === 50.0, 'CPU sample delta');
+check(Alo\cpuUsage($a, $a) === null, 'No elapsed ticks');
+check(Alo\cpuUsage($b, $a) === null, 'Counter reset');
+check(Alo\cpuUsage(null, $b) === null, 'Missing CPU');
+$n = Alo\networkInfo("eth0: 1000 2 3 4 0 0 0 0 2000 5 6 7 0 0 0 0\nlo: 50 0 0 0 0 0 0 0 50 0 0 0 0 0 0 0\n");
+check(count($n) === 1 && $n[0]['sent_bytes'] === 2000.0, 'Counters and loopback');
+check($n[0]['receive_drops'] === 4.0 && $n[0]['transmit_errors'] === 6.0, 'Network field mapping');
+check(Alo\networkInfo(null) === [], 'Missing network');
+check(Alo\supportStatus('8.5.1', '2026-09-08')['status'] === 'active', '8.5 support');
+check(Alo\supportStatus('8.3.30', '2026-09-08')['status'] === 'security_only', '8.3 support');
+check(Alo\supportStatus('8.3.30', '2028-01-01')['status'] === 'end_of_life', 'Expired branch');
+check(Alo\supportStatus('9.0.0', '2029-01-01')['status'] === 'unknown', 'Unknown branch');
+$t = str_repeat('a', 64); $h = hash('sha256', $t);
+check(Alo\validToken($t, $h), 'Correct token');
+check(!Alo\validToken(str_repeat('b', 64), $h), 'Wrong token');
+check(!Alo\validToken('', ''), 'Unset credentials');
+check(!Alo\validToken('short', hash('sha256', 'short')), 'Short token');
+check(!Alo\validToken(str_repeat('a', 257), $h), 'Oversize token');
+check(Alo\requestToken(['HTTP_AUTHORIZATION' => 'Bearer ' . $t]) === $t, 'Bearer');
+check(Alo\requestToken(['HTTP_AUTHORIZATION' => 'Basic ' . base64_encode('alo:' . $t)]) === $t, 'Basic');
+check(Alo\requestToken(['HTTP_AUTHORIZATION' => 'Basic ' . base64_encode('other:' . $t)]) === '', 'Wrong username');
+check(Alo\requestToken(['HTTP_AUTHORIZATION' => ['invalid']]) === '', 'Malformed header');
+check(Alo\requestToken(['HTTP_AUTHORIZATION' => 'Basic !!!']) === '', 'Malformed base64');
+check(Alo\trustedHttps(['HTTPS' => 'on'], ''), 'Direct HTTPS');
+check(!Alo\trustedHttps(['HTTP_X_FORWARDED_PROTO' => 'https', 'REMOTE_ADDR' => '192.0.2.1'], ''), 'Untrusted proxy');
+check(Alo\trustedHttps(['HTTP_X_FORWARDED_PROTO' => 'https', 'REMOTE_ADDR' => '192.0.2.1'], '192.0.2.1'), 'Trusted proxy');
+check(!Alo\trustedHttps(['HTTP_X_FORWARDED_PROTO' => 'https,http', 'REMOTE_ADDR' => '192.0.2.1'], '192.0.2.1'), 'Ambiguous protocol');
+check(!Alo\trustedHttps(['HTTP_X_FORWARDED_PROTO' => 'https', 'REMOTE_ADDR' => '192.0.2.2'], '192.0.2.1'), 'Exact proxy match');
+foreach (['LiteSpeed' => 'LiteSpeed / OpenLiteSpeed', 'OpenLiteSpeed' => 'OpenLiteSpeed', 'nginx/1.28' => 'Nginx', 'Apache/2.4' => 'Apache', 'Caddy' => 'Caddy', 'Microsoft-IIS/10' => 'Microsoft IIS'] as $input => $expected) {
+    check(Alo\webServer(['SERVER_SOFTWARE' => $input], 'fpm-fcgi')['family'] === $expected, 'Web server family: ' . $expected);
+}
+check(Alo\webServer([], 'litespeed')['family'] === 'LiteSpeed / OpenLiteSpeed', 'LSAPI fallback');
+check(Alo\webServer([], 'fpm-fcgi')['family'] === 'Unknown / not exposed', 'Do not invent proxy identity');
+check(Alo\escape('<script>"&') === '&lt;script&gt;&quot;&amp;', 'Escape strings');
+$r = Alo\collect();
+check($r['schema_version'] === 1 && is_array($r['runtime']['extensions']), 'Report contract');
+check(!isset($r['runtime']['settings']['error_log']), 'No log paths');
+$r['disk']['used_percent'] = 95; $r['memory']['used_percent'] = 85;
+$r['runtime']['settings']['allow_url_include'] = '1';
+$f = Alo\insights($r);
+check(count(array_filter($f, fn ($v) => $v['title'] === 'Disk pressure' && $v['severity'] === 'critical')) === 1, 'Disk insight');
+check(count(array_filter($f, fn ($v) => $v['title'] === 'Host memory pressure' && $v['severity'] === 'warning')) === 1, 'RAM insight');
+check(count(array_filter($f, fn ($v) => $v['title'] === 'Remote file inclusion is enabled')) === 1, 'Risky setting');
+$r['cpu']['model'] = '<script>alert(1)</script>';
+ob_start(); Alo\render($r, 'fixture-nonce'); $html = ob_get_clean();
+check(!str_contains($html, '<script>alert(1)</script>') && str_contains($html, '&lt;script&gt;'), 'Render escapes collected data');
+check(count(Alo\manifest()['mcp']['tools']) === 3, 'Agent manifest tools');
+echo "$count checks passed.\n";
