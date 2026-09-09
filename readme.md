@@ -28,12 +28,21 @@ Understand the environment serving your application without installing a monitor
 
 ## What it shows
 
-- **Resources:** sampled CPU busy time, visible cores, load average, uptime, available-based RAM usage, swap, and disk capacity.
-- **Containers:** separately labeled visible cgroup v2 root memory and CPU quotas.
-- **PHP:** version, branch lifecycle, selected configuration, extensions, PDO client drivers, and worker memory.
-- **OPcache:** memory, waste, hit rate, and cached script count, without cached file paths.
-- **Network:** cumulative interface bytes, errors, and drops; not an artificial speed test.
-- **Observations:** capacity thresholds and risky PHP settings with practical next steps.
+The dashboard opens with radial gauges, a CPU-time breakdown, a memory composition bar, and per-core
+utilisation. Everything else is stacked into collapsible sections, so the page stays readable while still
+carrying several hundred metrics.
+
+- **Processor:** per-core busy percentages, where CPU time went (user, system, I/O wait, **steal**, IRQ, idle), model, clock, cache, load average and load per core, runnable and blocked processes, context switches, interrupts and boot time.
+- **Memory:** the full `/proc/meminfo` composition — used, available, cache, buffers, shared, anonymous, mapped, active/inactive, dirty, writeback, slab, page tables, commit limit and huge pages — plus swap.
+- **Pressure:** Pressure Stall Information for CPU, memory and I/O over 10, 60 and 300 second windows. This catches contention that a utilisation percentage hides.
+- **Paging:** page faults, major faults, swap in/out, direct reclaims and kernel OOM kills.
+- **Storage:** every real mounted filesystem with its own usage, then cumulative per-device reads, writes, bytes and busy time.
+- **Network and sockets:** per-interface counters with link speed, MTU and state, plus TCP/UDP protocol counters, established connections, time-wait sockets and the retransmit rate.
+- **Containers:** cgroup v2 memory with its soft limit and peak, `memory.events` including **OOM kills**, CPU quota with **throttled periods and time**, and process counts against `pids.max`.
+- **Kernel:** distribution, kernel version, file-descriptor usage against the limit, CPU temperature, scaling governor, entropy and selected sysctls.
+- **PHP:** version and branch lifecycle, Zend engine, thread safety, selected configuration, extensions with versions, PDO client drivers, and worker memory.
+- **OPcache:** memory, waste, hit rate, hits and misses, cached scripts and keys, interned strings, restart counters and JIT buffer state, without cached file paths.
+- **Observations:** capacity thresholds, container throttling and OOM kills, sustained pressure, hypervisor steal, descriptor exhaustion, retransmits and risky PHP settings — each with a practical next step.
 - **Server family:** LiteSpeed/OpenLiteSpeed, Nginx, Apache, Caddy, and IIS where the runtime exposes identification.
 
 <details>
