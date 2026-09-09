@@ -35,6 +35,12 @@ Clarity and Pulse both support light, dark and system themes. Only view/theme pr
 
 Explore both views in the [public sample demo](https://alo.asif.dev/demo.html); live production metrics remain private.
 
+### Mobile preview
+
+[Explore the mobile layout](https://alo.asif.dev/mobile.html). Captured from the public sample in a 390-pixel frame; both views were checked for horizontal overflow.
+
+<img src="docs/screenshots/mobile.jpg" alt="Alo Clarity in a mobile viewport, with illustrative data" width="300">
+
 ## A bounded stream for agents
 
 ```sh

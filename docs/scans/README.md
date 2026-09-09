@@ -14,8 +14,10 @@ Verified 2026-09-09 after PR #13 merged and xCloud push-deployed `master`.
 - xCloud reports deployed/100%/no failed steps and push-deploy from `master`.
   Its redeploy-log list is empty, so deployment identity is checked through public files.
 - Current screenshots in this directory's sibling `screenshots/` were captured
-  from the deployed public pages. Desktop captures are 1348×926. The older mobile
-  PNG predates this redesign; mobile runtime verification is still outstanding.
+  from the deployed public pages. Desktop captures are 1348×926. The current mobile
+  JPEG was captured in a 390-pixel public iframe at `/mobile.html`. Clarity and
+  Pulse both had equal client and scroll widths (no horizontal overflow). This
+  verifies the responsive Chromium layout, not every mobile browser or device.
 
 ## AIScan
 
