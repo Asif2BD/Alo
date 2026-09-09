@@ -167,15 +167,15 @@ footer{border-top:1px solid var(--line);margin-top:3.5rem;padding:1.75rem 0 2.5r
   <section id="start">
     <h2>Quick start</h2>
     <p>Alo requires 64-bit PHP 8.3 or newer; PHP 8.5 is recommended for new installations. Linux provides the richest system metrics, and other platforms degrade honestly rather than inventing readings.</p>
-    <h3>1. Generate a token</h3>
-    <p>Run this on your local machine or over SSH. The token is 256 bits of randomness; only its SHA-256 digest is ever configured on the server.</p>
-    <pre><code>php alo.php --generate-token</code></pre>
-    <h3>2. Configure the digest outside the document root</h3>
-    <p>Set <code>ALO_TOKEN_HASH</code> in your hosting control panel, PHP-FPM pool, or LSAPI environment. A PHP-FPM pool with <code>clear_env</code> enabled needs an explicit entry:</p>
-    <pre><code>env[ALO_TOKEN_HASH] = "&lt;the printed sha256 digest&gt;"</code></pre>
-    <h3>3. Upload the one file</h3>
-    <p>Copy <code>alo.php</code> into a location served over HTTPS. Do not deploy the repository or the tests — only that file is meant to be reachable. Open it in a browser and authenticate with username <code>alo</code> and the generated token as the password.</p>
-    <p>An installation with no configured digest returns <code>503</code> and collects nothing. That is the intended locked state, not an error.</p>
+    <h3>One line</h3>
+    <p>You need a shell and PHP 8.3 or newer. Nothing else — no pool file to edit, no service to restart, no root.</p>
+    <pre><code>curl -fsSL https://raw.githubusercontent.com/Asif2BD/Alo/master/alo.php -o alo.php &amp;&amp; php alo.php --setup</code></pre>
+    <p><code>--setup</code> generates a 256-bit token, stores only its SHA-256 digest, and prints the token once. Put <code>alo.php</code> somewhere served over HTTPS and open it, using username <code>alo</code> and that token. Run <code>php alo.php --check</code> if it stays locked.</p>
+    <h3>Where the digest goes</h3>
+    <p>Setup writes <code>alo-hash.php</code> beside the probe. Its first statement is <code>exit</code>, so a web server willing to run <code>alo.php</code> runs it too and returns nothing. It holds a digest, not a credential: it cannot be replayed, and inverting SHA-256 over 256 bits of randomness is infeasible.</p>
+    <p>To keep the digest off the filesystem entirely, set <code>ALO_TOKEN_HASH</code> in the web PHP environment instead — the environment variable always wins.</p>
+    <h3>No shell?</h3>
+    <p>Run <code>--setup</code> on your own machine and upload both <code>alo.php</code> and the generated <code>alo-hash.php</code>. Nothing on the server needs configuring. An installation with no configured digest returns <code>503</code> and collects nothing, which is the intended locked state rather than an error.</p>
   </section>
 
   <section id="agents">
@@ -381,12 +381,17 @@ snapshot to humans and to AI agents.
 
 ## Quick start
 
-1. Generate a token: `php alo.php --generate-token`
-2. Configure the printed SHA-256 digest as `ALO_TOKEN_HASH` in the server
-   environment, outside the document root. A PHP-FPM pool with `clear_env`
-   enabled needs an explicit `env[ALO_TOKEN_HASH]` entry.
-3. Upload only `alo.php` to a location served over HTTPS. Authenticate with
-   username `alo` and the generated token.
+```sh
+curl -fsSL https://raw.githubusercontent.com/Asif2BD/Alo/master/alo.php -o alo.php && php alo.php --setup
+```
+
+That generates a 256-bit token, stores only its SHA-256 digest in `alo-hash.php`
+beside the probe, and prints the token once. Put `alo.php` somewhere served over
+HTTPS and sign in with username `alo`. No pool file, no restart, no root.
+
+Set `ALO_TOKEN_HASH` in the web PHP environment instead if you prefer the digest
+off the filesystem; the environment variable always wins. Agents can install
+unattended with `--setup --json` and verify with `--check --json`.
 
 An installation with no configured digest returns `503` and collects nothing.
 

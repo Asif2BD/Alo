@@ -23,14 +23,14 @@ def check(condition, message):
         raise AssertionError(message)
 
 @contextlib.contextmanager
-def server(settings):
+def server(settings, root=ROOT):
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
         port = sock.getsockname()[1]
     env = {k: v for k, v in os.environ.items() if not k.startswith('ALO_')}
     env.update(settings)
     env['ALO_TEST_SECRET'] = 'never-export-this-private-value'
-    proc = subprocess.Popen([PHP, '-d', 'display_errors=1', '-S', f'127.0.0.1:{port}', '-t', str(ROOT)],
+    proc = subprocess.Popen([PHP, '-d', 'display_errors=1', '-S', f'127.0.0.1:{port}', '-t', str(root)],
                             env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         for _ in range(100):
@@ -122,4 +122,45 @@ with server({'ALO_TOKEN_HASH': HASH, 'ALO_TRUSTED_PROXIES': '127.0.0.1'}) as por
     s, h, _ = request(port, headers={**AUTH, 'X-Forwarded-Proto': 'https'})
     check(s == 200 and 'strict-transport-security' in h, 'Trusted TLS proxy')
     check(request(port, headers={**AUTH, 'X-Forwarded-Proto': 'https,http'})[0] == 403, 'Ambiguous TLS proxy')
+# --- one-line install: the digest sidecar must actually authenticate over HTTP,
+# --- and must never be served, whatever the host's dotfile rules happen to be.
+import shutil
+import tempfile
+workdir = Path(tempfile.mkdtemp(prefix='alo-install-'))
+try:
+    shutil.copy(ROOT / 'alo.php', workdir / 'alo.php')
+    setup = subprocess.run([PHP, str(workdir / 'alo.php'), '--setup', '--json'],
+                           capture_output=True, text=True, cwd=str(workdir),
+                           env={k: v for k, v in os.environ.items() if not k.startswith('ALO_')})
+    check(setup.returncode == 0, 'Setup exits zero')
+    issued = json.loads(setup.stdout)
+    check(len(issued['token']) == 64 and len(issued['hash']) == 64, 'Setup issues a 256-bit token')
+    check(hashlib.sha256(issued['token'].encode()).hexdigest() == issued['hash'], 'Stored digest matches the token')
+    sidecar = Path(issued['hash_file'])
+    check(sidecar.exists() and oct(sidecar.stat().st_mode)[-3:] == '600', 'Digest file is 0600')
+    check(issued['token'] not in sidecar.read_text(), 'The token itself is never written to disk')
+
+    repeat = subprocess.run([PHP, str(workdir / 'alo.php'), '--setup', '--json'],
+                            capture_output=True, text=True, cwd=str(workdir),
+                            env={k: v for k, v in os.environ.items() if not k.startswith('ALO_')})
+    check(repeat.returncode == 3, 'Setup will not silently replace a live token')
+
+    with server({'ALO_ALLOW_LOCAL_HTTP': '1'}, root=workdir) as port:
+        bearer = {'Authorization': 'Bearer ' + issued['token']}
+        check(request(port, headers=bearer)[0] == 200, 'Sidecar digest authenticates')
+        check(request(port)[0] == 401, 'Sidecar install still refuses anonymous callers')
+        check(request(port, headers={'Authorization': 'Bearer ' + 'b' * 64})[0] == 401, 'Wrong token rejected')
+        basic = base64.b64encode(('alo:' + issued['token']).encode()).decode()
+        check(request(port, headers={'Authorization': 'Basic ' + basic})[0] == 200, 'Basic auth works after setup')
+        status, _, body = request(port, '/alo-hash.php')
+        check(issued['hash'] not in body, 'Fetching the digest sidecar reveals no digest')
+        check(body.strip() == '', 'The guarded sidecar executes and returns nothing')
+
+    check(subprocess.run([PHP, str(workdir / 'alo.php'), '--check', '--json'],
+                         capture_output=True, cwd=str(workdir),
+                         env={k: v for k, v in os.environ.items() if not k.startswith('ALO_')}).returncode == 0,
+          'Check reports ready after setup')
+finally:
+    shutil.rmtree(workdir, ignore_errors=True)
+
 print(f'{checks} HTTP checks passed.')

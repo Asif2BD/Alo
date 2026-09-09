@@ -711,6 +711,122 @@ function insights(array $report): array
     return $items;
 }
 
+/** Where the digest sidecar lives when no environment variable is set. */
+function tokenFilePath(): string
+{
+    $override = trim((string) getenv('ALO_TOKEN_FILE'));
+    return $override !== '' ? $override : __DIR__ . '/alo-hash.php';
+}
+
+/**
+ * The configured digest, or an empty string.
+ *
+ * ALO_TOKEN_HASH wins, because the most locked-down deployment keeps the digest
+ * out of the filesystem entirely. The sidecar exists so that a server with only
+ * shell access needs no pool file, no control panel and no service restart --
+ * that single step is what made Alo hard to install.
+ *
+ * The sidecar is safe to keep beside the probe. It holds the SHA-256 digest of
+ * 256 bits of randomness: it cannot be replayed as a credential, and inverting
+ * it is infeasible. It is still written 0600 and named as a dotfile, which the
+ * usual nginx and Apache rules already refuse to serve.
+ */
+function configuredHash(): string
+{
+    $environment = trim((string) getenv('ALO_TOKEN_HASH'));
+    if ($environment !== '') {
+        return $environment;
+    }
+    return digestIn(tokenFilePath());
+}
+
+/**
+ * Read a digest out of a sidecar.
+ *
+ * The default sidecar is a .php file whose first statement is exit, so a web
+ * server that is willing to run alo.php will run this too and return nothing.
+ * That removes the one thing a file next to the probe could otherwise leak. A
+ * plain file containing just the digest also works, for anyone who prefers it.
+ */
+function digestIn(string $path): string
+{
+    if (!@is_readable($path)) {
+        return '';
+    }
+    $raw = (string) @file_get_contents($path, false, null, 0, 512);
+    return preg_match('/([a-f0-9]{64})\s*$/D', trim($raw), $match) === 1 ? $match[1] : '';
+}
+
+/** Which of the two sources supplied the digest, for --check and diagnostics. */
+function hashSource(): ?string
+{
+    if (trim((string) getenv('ALO_TOKEN_HASH')) !== '') {
+        return 'environment';
+    }
+    return digestIn(tokenFilePath()) !== '' ? 'file' : null;
+}
+
+/**
+ * Generate a token and store only its digest. Idempotent: an existing digest is
+ * never silently replaced, because that would lock out whoever holds the token.
+ */
+function setupToken(bool $force): array
+{
+    $path = tokenFilePath();
+    if (trim((string) getenv('ALO_TOKEN_HASH')) !== '') {
+        return ['ok' => false, 'code' => 3, 'reason' => 'environment_set',
+            'message' => 'ALO_TOKEN_HASH is already set in this environment, which takes precedence over any file. Unset it, or rotate the token where that variable is defined.'];
+    }
+    if (!$force && digestIn($path) !== '') {
+        return ['ok' => false, 'code' => 3, 'reason' => 'already_configured', 'hash_file' => $path,
+            'message' => 'Alo is already set up. Re-run with --force to issue a new token; the current one stops working immediately.'];
+    }
+    $token = bin2hex(random_bytes(32));
+    $digest = hash('sha256', $token);
+    // Guarded so that serving this file executes it and yields nothing.
+    $body = "<?php exit; /* Alo access digest. Not a credential: it cannot be replayed. */ ?>\n" . $digest . "\n";
+    $previous = umask(0o077);
+    $written = @file_put_contents($path, $body, LOCK_EX);
+    umask($previous);
+    if ($written === false) {
+        return ['ok' => false, 'code' => 4, 'reason' => 'write_failed', 'hash_file' => $path,
+            'message' => 'Could not write ' . $path . '. Check directory permissions, or set ALO_TOKEN_HASH=' . $digest . ' in the web PHP environment instead.'];
+    }
+    @chmod($path, 0o600);
+    return ['ok' => true, 'code' => 0, 'token' => $token, 'hash' => $digest, 'hash_file' => $path,
+        'username' => 'alo', 'message' => 'Alo is ready. Store the token now: it is not recoverable from the server.'];
+}
+
+/** Readiness report for humans and for agents that install Alo unattended. */
+function checkInstall(): array
+{
+    $path = tokenFilePath();
+    $source = hashSource();
+    $digest = configuredHash();
+    $warnings = [];
+    if ($source === null) {
+        $warnings[] = @file_exists($path)
+            ? 'A digest file exists at ' . $path . ' but no digest could be read from it. Re-run: php alo.php --setup --force'
+            : 'No digest configured. Run: php alo.php --setup';
+    } elseif (preg_match('/^[a-f0-9]{64}$/D', $digest) !== 1) {
+        $warnings[] = 'The configured digest is not 64 hex characters, so Alo will stay locked.';
+    }
+    if ($source === 'file' && @file_exists($path)) {
+        $mode = @fileperms($path);
+        if ($mode !== false && ($mode & 0o077) !== 0) {
+            $warnings[] = 'The digest file is readable by other users. Run: chmod 600 ' . $path;
+        }
+    }
+    if (PHP_VERSION_ID < 80300 || PHP_INT_SIZE < 8) {
+        $warnings[] = 'Alo requires 64-bit PHP 8.3 or newer. This runtime is ' . PHP_VERSION . '.';
+    }
+    return ['ok' => $warnings === [], 'alo_version' => VERSION, 'php_version' => PHP_VERSION,
+        'php_supported' => PHP_VERSION_ID >= 80300 && PHP_INT_SIZE >= 8,
+        'digest_configured' => $source !== null, 'digest_source' => $source, 'hash_file' => $path,
+        'reminder' => 'Every web route additionally requires HTTPS and rejects credentials in the URL.',
+        'warnings' => $warnings];
+}
+
 function trustedHttps(array $server, string $proxyList): bool
 {
     if (in_array(strtolower((string) ($server['HTTPS'] ?? '')), ['on', '1'], true)) {
@@ -1423,14 +1539,47 @@ function main(): void
     }
     if (PHP_SAPI === 'cli') {
         $args = $_SERVER['argv'] ?? [];
-        if (($args[1] ?? '') === '--generate-token') {
+        $flags = array_slice($args, 1);
+        $command = $flags[0] ?? '';
+        $wantsJson = in_array('--json', $flags, true);
+        if ($command === '--setup') {
+            $result = setupToken(in_array('--force', $flags, true));
+            if ($wantsJson) {
+                echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
+                exit($result['code']);
+            }
+            if (!$result['ok']) {
+                fwrite(STDERR, $result['message'] . "\n");
+                exit($result['code']);
+            }
+            echo "\n  Alo is ready.\n\n  Username  alo\n  Token     " . $result['token']
+                . "\n\n  Store the token now -- the server keeps only its digest, so it cannot be shown again.\n"
+                . "  Digest written to " . $result['hash_file'] . " (mode 0600).\n\n"
+                . "  Open alo.php over HTTPS and sign in. Run 'php alo.php --check' if it stays locked.\n\n";
+            return;
+        }
+        if ($command === '--check') {
+            $report = checkInstall();
+            if ($wantsJson) {
+                echo json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
+                exit($report['ok'] ? 0 : 1);
+            }
+            echo ($report['ok'] ? "Ready." : "Not ready.") . "\n  Alo " . $report['alo_version']
+                . " on PHP " . $report['php_version'] . "\n  Digest: "
+                . ($report['digest_source'] ?? 'not configured') . "\n";
+            foreach ($report['warnings'] as $warning) {
+                echo "  - " . $warning . "\n";
+            }
+            exit($report['ok'] ? 0 : 1);
+        }
+        if ($command === '--generate-token') {
             $token = bin2hex(random_bytes(32));
             echo "Store this token in your password manager; use username alo in the browser.\nToken: " . $token
                 . "\nSet this server environment value (never the token itself):\nALO_TOKEN_HASH=" . hash('sha256', $token) . "\n";
             return;
         }
-        if (count($args) > 1 && ($args[1] ?? '') !== '--json') {
-            fwrite(STDERR, "Usage: php alo.php [--json|--generate-token]\n");
+        if ($command !== '' && $command !== '--json') {
+            fwrite(STDERR, "Usage: php alo.php [--setup [--force] [--json] | --check [--json] | --generate-token | --json]\n");
             exit(2);
         }
         echo json_encode(collect(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR) . "\n";
@@ -1457,7 +1606,7 @@ function main(): void
     if ($https) {
         header('Strict-Transport-Security: max-age=31536000');
     }
-    $hash = (string) getenv('ALO_TOKEN_HASH');
+    $hash = configuredHash();
     if (!preg_match('/^[a-f0-9]{64}$/D', $hash)) {
         fail(503, 'Alo is locked. Configure access on the server before use.');
     }
