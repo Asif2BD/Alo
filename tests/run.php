@@ -136,9 +136,9 @@ $base = ['disk' => ['used_percent' => 10, 'mounts' => []], 'memory' => ['used_pe
     'pressure' => ['cpu' => ['some_avg60' => 50.0], 'memory' => ['some_avg60' => 0.0], 'io' => ['some_avg60' => 0.0]],
     'sockets' => ['retransmit_percent' => 5.0], 'paging' => ['swap_out' => 0.0]];
 $titles = array_column(Alo\insights($base), 'title');
-foreach (['Container CPU is being throttled', 'The cgroup has killed processes for memory',
+foreach (['Container CPU throttling recorded', 'The cgroup has killed processes for memory',
     'CPU pressure is stalling work', 'The hypervisor is taking CPU time',
-    'Open file descriptors are near the kernel limit', 'TCP segments are being retransmitted',
+    'Open file descriptors are near the kernel limit', 'TCP retransmissions recorded',
     'OPcache has restarted out of memory'] as $expected) {
     check(in_array($expected, $titles, true), "Insight: $expected");
 }
@@ -199,4 +199,12 @@ foreach ($formats as $format) {
 check(str_contains($llms, 'sample=') && str_contains($llms, 'fields='), 'llms.txt lists the query parameters');
 check(str_contains($builder, '"name": "sample"') && str_contains($builder, '"name": "fields"'), 'OpenAPI documents the query parameters');
 
+// Lifetime evidence must not masquerade as an active incident.
+$observations = Alo\insights($base);
+foreach ($observations as $item) {
+    check(isset($item['state'], $item['scope'], $item['window'], $item['evidence_family']), 'Observation has interpretation metadata');
+    if (in_array($item['title'], ['Container CPU throttling recorded', 'The cgroup has killed processes for memory', 'TCP retransmissions recorded', 'OPcache has restarted out of memory'], true)) {
+        check($item['state'] === 'historical' && $item['severity'] === 'info', 'Lifetime event is historical evidence, not an active alert');
+    }
+}
 echo "$count checks passed.\n";

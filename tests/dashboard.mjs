@@ -1,0 +1,20 @@
+// Pure rate semantics from the self-contained distributable; no browser needed.
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+const source=readFileSync(new URL('../alo.php',import.meta.url),'utf8');
+const start=source.indexOf('const sampleValue='),end=source.indexOf('// Only the latest raw snapshot',start);
+const rate=vm.runInNewContext(source.slice(start,end)+';networkRate;');
+const reading=(rx,tx,boot='boot-a',iface='eth0')=>({instance:'web',cpu:{scheduler:{boot_time:boot}},network:[{interface:iface,received_bytes:rx,sent_bytes:tx}]});
+assert.equal(rate(reading(100,200),reading(400,500),30),20);
+assert.equal(rate(null,reading(400,500),30),null);
+assert.equal(rate(reading(100,200),reading(400,500),0),null);
+assert.equal(rate(reading(100,200),reading(400,500),91),null);
+assert.equal(rate(reading(100,200),reading(40,500),30),null);
+assert.equal(rate(reading(100,200),reading(400,500,'boot-b'),30),null);
+assert.equal(rate(reading(100,200,null),reading(400,500,null),30),null);
+assert.equal(rate(reading(100,200),reading(400,500,'boot-a','eth1'),30),null);
+assert.equal(rate(reading(100,200),reading(null,500),30),null);
+assert.equal(rate(reading(100,200),reading(100,200),30),0);
+assert.equal(rate(reading(100,200),{...reading(400,500),instance:'other'},30),null);
+console.log('11 session-rate checks passed.');

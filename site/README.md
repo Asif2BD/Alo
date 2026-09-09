@@ -17,12 +17,12 @@ explicit that only `alo.php` should ever be reachable over the web, so the
 build copies exactly that one executable file into `public/` and leaves the
 tests, the git metadata, and the licence text outside the document root.
 
-Everything else the build writes is documentation *about* Alo:
+The builder requires PHP 8.3+ to render deterministic sample HTML and compute payload checksums. It preserves existing files, including the access digest, across rebuilds; obsolete public artifacts must be removed explicitly. Everything else it writes is documentation or a distributable:
 
 | Path | Purpose |
 | --- | --- |
 | `index.html` | The landing page. Semantic HTML, one `<h1>`, inline CSS, no external assets or fonts. |
-| `index.md` | The same content as Markdown, served on `Accept: text/markdown`. |
+| `index.md` | The same content as Markdown, available directly; root negotiation requires the Nginx configuration below. |
 | `docs/*.md` | Copies of `readme.md`, `SECURITY.md` and `docs/*.md`. |
 | `llms.txt` | Copied from the repository root. |
 | `robots.txt` | Crawl rules, a Content Signals policy, and the sitemap pointer. |
@@ -53,3 +53,27 @@ The claims on the landing page — supported PHP versions, the three MCP tools,
 the protocol versions, the security boundary — are drawn from `readme.md`,
 `docs/agents.md` and `SECURITY.md`. When those change, update `build.sh` in the
 same commit so the site cannot drift away from the documentation it summarises.
+
+## Public files added in 2.2
+
+`demo.html` is static sample HTML, never a live probe. `install.sh` pins a checksummed, content-addressed payload under `downloads/alo-<sha256>.txt`; the text extension is intentional so PHP does not execute the download. Prior payloads remain available for pinned installers. `docs/contributing.md` is the public contributor guide.
+
+## Root Markdown negotiation on Nginx
+
+The build alone cannot change server routing. Replace the existing exact-root block with this snippet in the site's custom Nginx configuration, validate it, then reload through the hosting panel:
+
+```nginx
+location = / {
+    add_header Vary Accept always;
+    add_header Cache-Control "public, max-age=600" always;
+    if ($http_accept ~* "text/markdown") { rewrite ^ /index.md last; }
+    try_files /index.html =404;
+}
+location = /index.md {
+    default_type text/markdown;
+    add_header Vary Accept always;
+    add_header Cache-Control "public, max-age=600" always;
+}
+```
+
+Preserve the site's HSTS/security headers. Confirm both representations and `Vary: Accept` through the actual CDN/proxy; never apply public caching rules to `alo.php`.

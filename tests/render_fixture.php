@@ -25,7 +25,7 @@ $data = [
             'standard', 'tokenizer', 'xml', 'xmlreader', 'xmlwriter', 'Zend OPcache', 'zip', 'zlib'],
         'database_drivers' => ['mysql', 'sqlite'],
     ],
-    'cpu' => ['model' => 'AMD EPYC · sample virtual CPU', 'logical_cores' => 8, 'busy_percent' => 14.6,
+    'cpu' => ['model' => 'AMD EPYC · sample virtual CPU', 'logical_cores' => 8, 'busy_percent' => 15.8,
         'sample_ms' => 100, 'load_1m' => 1.24, 'load_5m' => 1.08, 'load_15m' => 0.92],
     'memory' => ['total_bytes' => 16 * $gib, 'used_bytes' => 9.76 * $gib, 'available_bytes' => 6.24 * $gib,
         'used_percent' => 61.0, 'swap_total_bytes' => 2 * $gib, 'swap_used_bytes' => 0, 'swap_used_percent' => 0],
@@ -106,6 +106,15 @@ $data['opcache'] += ['wasted_percent' => 0.24, 'cached_keys' => 1248, 'max_cache
 $data['runtime'] += ['zend_version' => '4.5.0', 'thread_safe' => false, 'debug_build' => false,
     'extension_versions' => []];
 
+$data['demo'] = true;
+$data['instance'] = 'sample-web-01';
+$data['demo_history'] = [];
+$series = [12, 15, 13, 21, 32, 19, 16, 18, 26, 43, 38, 24, 19, 17, 24, 35, 22, 18, 16, 17, 15.8];
+foreach ($series as $i => $value) {
+    $data['demo_history'][] = ['at' => gmdate('c', strtotime('2026-09-08T11:50:00Z') + $i * 30),
+        'cpu' => $value, 'memory' => 60 + $i / 20, 'pressure' => $i > 7 && $i < 13 ? ($value - 10) / 5 : 0.02,
+        'network' => $i === 0 ? null : (180 + $value * 15) * 1024];
+}
 $data['insights'] = Alo\insights($data);
 ob_start();
 Alo\render($data, 'sample-fixture-only');

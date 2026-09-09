@@ -7,25 +7,48 @@
 
 [![CI](https://github.com/Asif2BD/Alo/actions/workflows/ci.yml/badge.svg)](https://github.com/Asif2BD/Alo/actions/workflows/ci.yml)
 [![PHP](https://img.shields.io/badge/PHP-8.3%20%7C%208.4%20%7C%208.5-777bb4)](https://www.php.net/supported-versions.php)
-[![tests](https://img.shields.io/badge/tests-200%20passing-2ea44f)](tests/)
+[![tests](https://img.shields.io/badge/tests-security%20%2B%20HTTP%20%2B%20UI-2ea44f)](tests/)
 [![dependencies](https://img.shields.io/badge/dependencies-none-2ea44f)](#)
 [![deploy](https://img.shields.io/badge/deploy-one%20file-orange)](#install-in-one-line)
 [![license](https://img.shields.io/badge/license-GPL--3.0--only-blue)](gpl-3.0.txt)
 
 [Install](#install-in-one-line) · [What it shows](#what-it-shows) · [AI & MCP](docs/agents.md) · [Server support](docs/hosting.md) · [Security](SECURITY.md) · [Contribute](CONTRIBUTING.md)
 
-![The Alo dashboard: six radial gauges for CPU, memory, disk, cgroup memory, swap and file descriptors, a CPU-time breakdown separating steal and I/O wait, a memory composition bar, per-core utilisation, and collapsible sections of full telemetry](docs/screenshots/desktop.png)
+![Alo Clarity: resource summaries, session signals and evidence, with illustrative data](docs/screenshots/desktop.png)
 
 *Actual Alo interface rendered with illustrative sample data. This is not a live server or benchmark.*
 
 </div>
 
-## Install in one line
 
-You need a shell and PHP 8.3+. Nothing else — no pool file to edit, no service to restart, no root.
+## Three experiences, one project
+
+- **Clarity** is the default dashboard: a calm overview, CPU signal, resource anatomy and scoped observations.
+- **Pulse** is the selectable investigation view: aligned CPU, memory, PSI and network timelines.
+- **Launch** is the public [homepage](https://alo.asif.dev), install guide and [sample demo](https://alo.asif.dev/demo.html). It never exposes live server telemetry.
+
+Clarity and Pulse both support light, dark and system themes. Only view/theme preferences enter local storage. Session collection is opt-in, runs every 30 seconds while the tab is visible, stops on errors, and retains at most 120 compact readings **in browser memory**. Reloading clears history. Long gaps and unavailable values break charts; network rates require two compatible readings and a known unchanged boot identity. Very fast counter resets that recover between samples cannot be detected. Full telemetry panels describe the initial snapshot until you refresh.
+
+![Pulse dashboard in dark theme, with illustrative session data](docs/screenshots/desktop-dark.png)
+
+Explore both views in the [public sample demo](https://alo.asif.dev/demo.html); live production metrics remain private.
+
+## A bounded stream for agents
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Asif2BD/Alo/master/alo.php -o alo.php && php alo.php --setup
+php alo.php --watch --interval=30 --count=20
+```
+
+One complete JSON snapshot per line, starting immediately. Intervals are 30–300 seconds, counts 1–120, and the total waiting period cannot exceed one hour. The CLI requires local/SSH access and reports the CLI PHP runtime. It does not hold a web worker open or accept remote commands. Use authenticated JSON/MCP for the web runtime. Counters remain raw; consumers must compute reset-aware deltas.
+
+Observations include `state`, `scope`, `window` and `evidence_family`. Cumulative OOM, throttling, retransmission and restart events are labeled **historical**, not current incidents. No absence of alerts constitutes a health guarantee.
+
+## Install in one line
+
+Run as your site user in an existing HTTPS web directory. You need curl and 64-bit PHP 8.3+. Linux exposes the richest metrics; other systems report unavailable readings honestly.
+
+```sh
+curl -fsSL https://alo.asif.dev/install.sh | sh -s -- --setup
 ```
 
 `--setup` generates a 256-bit token, stores **only its SHA-256 digest**, and prints the token once:
@@ -37,15 +60,16 @@ curl -fsSL https://raw.githubusercontent.com/Asif2BD/Alo/master/alo.php -o alo.p
   Token     f6f057d1bc5efbebd0be00aaf14606a4db6ae587f799e379fd148305c4afd198
 ```
 
-Put `alo.php` somewhere served over HTTPS and open it. That is the whole install.
+The bootstrap is trusted through HTTPS. You can [inspect and download it](https://alo.asif.dev/install.sh) before execution. Its embedded SHA-256 pins the payload and detects changes; it is not an independent signature. The installer validates PHP and replaces `alo.php` atomically, preserving access configuration. Use `--dir /path/to/webroot` to choose the destination, or `PHP_BINARY` to select PHP. Run without `--setup` for an upgrade. Keep your previously verified `alo.php` outside the web root if you need rollback; restore that file without replacing the digest.
 
-Run `php alo.php --check` at any time to see whether it is ready and why not.
+Open `alo.php` over HTTPS. Verify **401 without credentials and 200 with credentials**. The web PHP worker must own or be able to read the 0600 digest; CLI success does not prove web-worker access. Never make the digest world-readable to fix an ownership mismatch.
+
+Run `php alo.php --check --json` for CLI readiness. `web_verified: false` explicitly means HTTPS, authentication and the actual PHP web worker still need verification.
 
 ### Where the digest goes
 
 `--setup` writes `alo-hash.php` next to the probe. It is a PHP file whose first statement is `exit`, so a
-web server willing to run `alo.php` runs this too and returns **nothing** — there is no path by which it
-leaks. It is written `0600`, and it holds a digest, not a credential: it cannot be replayed, and inverting
+web server willing to run `alo.php` runs this too and returns **nothing** when PHP is correctly configured. Keep it private; a broken PHP handler can expose source files. It is written `0600`, and it holds a digest, not a credential: it cannot be replayed, and inverting
 SHA-256 over 256 bits of randomness is infeasible.
 
 If you would rather keep the digest off the filesystem entirely, set `ALO_TOKEN_HASH` in the web PHP
@@ -59,7 +83,7 @@ generated `alo-hash.php`. Nothing on the server needs configuring.
 
 ### Installing from an agent or a script
 
-Every command is non-interactive and idempotent, with meaningful exit codes.
+Commands are non-interactive. Repeated setup refuses an existing digest; only explicit `--force` rotates access. Capture setup output directly into your secret store, not build logs.
 
 ```sh
 php alo.php --setup --json     # {"ok":true,"token":"...","hash":"...","hash_file":"..."}
@@ -75,8 +99,7 @@ php alo.php --check --json     # readiness report; exit 0 when ready
 | `4` | Could not write the digest; the message includes the `ALO_TOKEN_HASH` value to set instead |
 
 An agent pushing Alo to a fleet can therefore run the one-liner, parse the token out of
-`--setup --json`, store it in its own secret store, and verify with `--check --json` — without a human
-in the loop, and without ever leaving the token on the server.
+`--setup --json`, store it in its own secret store, and check CLI readiness with `--check --json`. Then verify the actual HTTPS endpoint with and without authentication. Keep the raw token out of logs and committed files.
 
 For containers and immutable infrastructure, skip `--setup` and pass the digest in:
 
@@ -106,7 +129,7 @@ never sends telemetry or loads third-party assets.
 
 ## What it shows
 
-The dashboard opens with radial gauges, a CPU-time breakdown, a memory composition bar, and per-core
+The dashboard opens with resource summaries, a CPU-time breakdown, a memory composition bar, and per-core
 utilisation. Everything else is stacked into collapsible sections, so the page stays readable while still
 carrying several hundred metrics.
 
@@ -172,7 +195,7 @@ These are architectural compatibility targets. Automated tests cover PHP version
 
 ## Understand the readings
 
-Alo is a **snapshot**, not a monitoring daemon or a security certification. It stores no history and does not auto-poll. CPU sampling takes about 100 ms. Capacity observations start at 80% warning / 90% critical; they are investigation prompts, not universal operational limits.
+Alo is a **snapshot**, not a monitoring daemon or a security certification. It stores no server-side history. Optional browser sessions poll every 30 seconds while visible; local CLI watch is explicitly bounded. CPU sampling takes about 100 ms. Capacity observations start at 80% warning / 90% critical; they are investigation prompts, not universal operational limits.
 
 Host-visible CPU/RAM may describe the host rather than a container. Cgroup data covers the visible v2 root, not necessarily the PHP worker's nested limits. Disk covers the filesystem containing the probe, not all disks, inodes, or quotas. Network counters are cumulative. PDO drivers do not establish database connectivity. Missing readings stay `null`; they never mean “healthy.”
 

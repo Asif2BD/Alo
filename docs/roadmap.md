@@ -7,7 +7,8 @@ Alo 2 ships as a single PHP file. It also provides a language-neutral snapshot f
 - PHP runtime and OPcache diagnostics.
 - Linux host-visible resources and visible cgroup v2 root metrics.
 - Web server family identification, including LiteSpeed/LSAPI.
-- Human dashboard, authenticated JSON, and read-only MCP.
+- Clarity/Pulse dashboards, Launch homepage, authenticated JSON/OpenMetrics and read-only MCP.
+- Bounded browser session history and local JSONL watch, with explicit evidence windows.
 - Explicit metric units, scope, timestamps, unavailable values, and interpretation guidance.
 
 ## Next: improve server coverage
@@ -15,12 +16,12 @@ Alo 2 ships as a single PHP file. It also provides a language-neutral snapshot f
 - Validate real deployments on LiteSpeed Enterprise/OpenLiteSpeed, Apache, Nginx, Caddy, and IIS.
 - Add reliable process-specific cgroup resolution, cgroup v1 coverage, and better container scope detection.
 - Explore opt-in native server collectors: LiteSpeed worker/queue statistics, Apache status, and Nginx status. Each needs an explicit read-only source, authorization policy, and bounded collection budget.
-- Improve inode/multi-filesystem coverage without exposing sensitive paths.
+- Add inode coverage and review mount-path disclosure; per-filesystem usage already exists behind authentication.
 - Add configurable thresholds with documented defaults and deterministic tests.
 
 ## Then: collectors beyond PHP
 
-A future small local collector could be written in Go, Node.js, or Python, exposing the same snapshot contract. Keep collection, transport, and presentation separate:
+A future standalone collector could be written in Go (preferred starting point), Node.js, or Python, exposing the same snapshot contract. Keep collection, transport, and presentation separate:
 
 | Layer | Contract |
 | --- | --- |

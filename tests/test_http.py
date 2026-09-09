@@ -199,4 +199,17 @@ with server({'ALO_TOKEN_HASH': HASH, 'ALO_ALLOW_LOCAL_HTTP': '1', 'ALO_INSTANCE'
     check(request(port, '/alo.php?fields=../etc', AUTH)[0] == 400, 'Bad fields value rejected')
     check(request(port, '/alo.php?unknown=1', AUTH)[0] == 400, 'Unknown parameters still rejected')
 
+# Invalid array query arguments cannot become PHP warnings or implicit values.
+with server({'ALO_TOKEN_HASH': HASH, 'ALO_ALLOW_LOCAL_HTTP': '1'}) as port:
+    for path in ['/alo.php?sample[]=1', '/alo.php?fields[]=cpu', '/alo.php?sample=1001']:
+        check(request(port, path, AUTH)[0] == 400, 'Reject malformed query: ' + path)
+    picked = json.loads(request(port, '/alo.php?format=json&fields=cpu', AUTH)[2])
+    check('scope' in picked, 'Selected snapshots retain scope')
+stream = subprocess.run([PHP, str(ROOT / 'alo.php'), '--watch', '--count=1'], capture_output=True, text=True, timeout=5)
+check(stream.returncode == 0 and len(stream.stdout.splitlines()) == 1, 'One-reading watch is bounded JSONL')
+check(json.loads(stream.stdout)['schema_version'] == 1, 'Watch retains snapshot contract')
+for flags in [['--interval=1'], ['--count=0'], ['--count=9999'], ['--interval=300','--count=120'], ['--path=/etc/passwd']]:
+    result = subprocess.run([PHP, str(ROOT / 'alo.php'), '--watch', *flags], capture_output=True, text=True, timeout=5)
+    check(result.returncode == 2 and not result.stdout, 'Reject unsafe watch bounds')
+
 print(f'{checks} HTTP checks passed.')
