@@ -7,7 +7,7 @@
 
 [![CI](https://github.com/Asif2BD/Alo/actions/workflows/ci.yml/badge.svg)](https://github.com/Asif2BD/Alo/actions/workflows/ci.yml)
 [![PHP](https://img.shields.io/badge/PHP-8.3%20%7C%208.4%20%7C%208.5-777bb4)](https://www.php.net/supported-versions.php)
-[![tests](https://img.shields.io/badge/tests-191%20passing-2ea44f)](tests/)
+[![tests](https://img.shields.io/badge/tests-200%20passing-2ea44f)](tests/)
 [![dependencies](https://img.shields.io/badge/dependencies-none-2ea44f)](#)
 [![deploy](https://img.shields.io/badge/deploy-one%20file-orange)](#install-in-one-line)
 [![license](https://img.shields.io/badge/license-GPL--3.0--only-blue)](gpl-3.0.txt)
@@ -209,10 +209,10 @@ Set the interval no tighter than 30 seconds, and prefer `sample=0` below 60.
 
 ## Tests
 
-**191 automated checks** run on every push against **PHP 8.3, 8.4 and 8.5**:
+**200 automated checks** run on every push against **PHP 8.3, 8.4 and 8.5**:
 
 ```sh
-php tests/run.php        # 106 checks: parsers, chart geometry, insights, escaping
+php tests/run.php        # 115 checks: parsers, chart geometry, insights, escaping
 python3 tests/test_http.py # 85 checks: real HTTP, auth, MCP, install
 ```
 

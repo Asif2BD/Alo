@@ -730,15 +730,29 @@ cat > "$PUB/openapi.json" <<'OPENAPI'
     "/alo.php": {
       "get": {
         "operationId": "getSnapshot",
-        "summary": "Server snapshot, capability manifest, or dashboard",
-        "description": "Returns a timestamped read-only snapshot. 'json' returns the full snapshot, 'manifest' returns metric semantics and capabilities, 'html' (the default) returns the human dashboard.",
+        "summary": "Server snapshot, OpenMetrics exposition, capability manifest, or dashboard",
+        "description": "Returns a timestamped read-only snapshot. 'json' returns the full snapshot, 'metrics' returns an OpenMetrics 1.0 exposition for a fleet scraper, 'manifest' returns metric semantics and capabilities, and 'html' (the default) returns the human dashboard.",
         "parameters": [
           {
             "name": "format",
             "in": "query",
             "required": false,
             "description": "Representation to return. Defaults to html.",
-            "schema": { "type": "string", "enum": ["html", "json", "manifest"], "default": "html" }
+            "schema": { "type": "string", "enum": ["html", "json", "manifest", "metrics"], "default": "html" }
+          },
+          {
+            "name": "sample",
+            "in": "query",
+            "required": false,
+            "description": "Milliseconds to sample CPU for. Sampling is almost the entire cost of a request; sample=0 skips it and reports busy percentages as null rather than zero.",
+            "schema": { "type": "integer", "minimum": 0, "maximum": 1000, "default": 100 }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "required": false,
+            "description": "Comma-separated top-level families to return from format=json. Identity fields are always included.",
+            "schema": { "type": "string", "examples": ["memory,disk"] }
           }
         ],
         "responses": {
@@ -763,7 +777,17 @@ cat > "$PUB/openapi.json" <<'OPENAPI'
                   }
                 }
               },
-              "text/html": { "schema": { "type": "string" } }
+              "text/html": { "schema": { "type": "string" } },
+              "application/openmetrics-text": {
+                "schema": { "type": "string" },
+                "description": "OpenMetrics 1.0 exposition, terminated with # EOF. Cumulative series are typed as counters and exported raw; differentiate two scrapes to obtain a rate. Percentages are 0-1 ratios. A reading that could not be taken is omitted entirely rather than exported as zero."
+              }
+            },
+            "headers": {
+              "Server-Timing": {
+                "description": "collect;dur=<milliseconds> spent building the snapshot.",
+                "schema": { "type": "string" }
+              }
             }
           },
           "400": { "description": "Unsupported format." },
@@ -910,6 +934,12 @@ cat > "$PUB/.well-known/mcp/server-card.json" <<'CARD'
     "State the snapshot timestamp and metric scope when giving advice.",
     "Poll no more often than every 30 seconds. This is client guidance, not an enforced limit.",
     "Ask the administrator before changing anything through another tool. Alo itself can change nothing."
+  ],
+  "alternativeInterfaces": [
+    { "type": "openmetrics", "url": "https://alo.asif.dev/alo.php?format=metrics",
+      "description": "OpenMetrics 1.0 for fleet scraping. Counters are exported raw so the scraper computes rates; Alo keeps no history. Add sample=0 to skip the CPU sampling sleep." },
+    { "type": "json", "url": "https://alo.asif.dev/alo.php?format=json",
+      "description": "The same snapshot as JSON. Accepts fields= to trim it." }
   ],
   "documentation": "https://alo.asif.dev/docs/agents.md",
   "license": "GPL-3.0-only",
