@@ -171,4 +171,9 @@ check(Alo\ratio(1027, 1000) === 102.7, 'Overcommit is reported above 100%');
 check(Alo\percent(1027, 1000) === 100.0, 'Gauges still clamp to 100%');
 check(Alo\ratio(1, 0) === null && Alo\ratio(null, 5) === null, 'Ratio guards missing data');
 
+$single = Alo\columnChart([['0', 50.0]], 'aria');
+preg_match('/rect class="col-track" x="([\d.]+)" y="1" width="([\d.]+)"/', $single, $bar);
+check((float) $bar[2] <= 9.0, 'A single core does not draw a full-width slab');
+check(abs((float) $bar[1] + (float) $bar[2] / 2 - 50.0) < 0.01, 'A single bar is centred');
+
 echo "$count checks passed.\n";

@@ -1103,7 +1103,8 @@ function columnChart(array $entries, string $aria): string
     // A fixed 100x26 viewBox keeps the aspect ratio landscape whatever the core
     // count, so the chart never stretches to the height of the page.
     $step = 100 / $count;
-    $barWidth = round($step * 0.7, 3);
+    // Cap the bar so a single-core host does not draw one 70-unit-wide slab.
+    $barWidth = round(min($step * 0.7, 9.0), 3);
     $labelled = $count <= 16;
     $svg = '<svg class="cols" viewBox="0 0 100 ' . ($labelled ? 18 : 14) . '" role="img" aria-label="' . escape($aria) . '">';
     foreach (array_values($entries) as $index => [$label, $percent]) {
