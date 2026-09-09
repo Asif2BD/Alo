@@ -14,7 +14,7 @@
 
 [Install](#install-in-one-line) · [What it shows](#what-it-shows) · [AI & MCP](docs/agents.md) · [Server support](docs/hosting.md) · [Security](SECURITY.md) · [Contribute](CONTRIBUTING.md)
 
-![Alo Clarity: resource summaries, session signals and evidence, with illustrative data](docs/screenshots/desktop.png)
+![Alo Clarity: resource summaries, session signals and evidence, with illustrative data](docs/screenshots/desktop.jpg)
 
 *Actual Alo interface rendered with illustrative sample data. This is not a live server or benchmark.*
 
@@ -29,7 +29,9 @@
 
 Clarity and Pulse both support light, dark and system themes. Only view/theme preferences enter local storage. Session collection is opt-in, runs every 30 seconds while the tab is visible, stops on errors, and retains at most 120 compact readings **in browser memory**. Reloading clears history. Long gaps and unavailable values break charts; network rates require two compatible readings and a known unchanged boot identity. Very fast counter resets that recover between samples cannot be detected. Full telemetry panels describe the initial snapshot until you refresh.
 
-![Pulse dashboard in dark theme, with illustrative session data](docs/screenshots/desktop-dark.png)
+![Pulse dashboard in dark theme, with illustrative session data](docs/screenshots/desktop-dark.jpg)
+
+![Launch homepage, captured after deployment](docs/screenshots/launch.jpg)
 
 Explore both views in the [public sample demo](https://alo.asif.dev/demo.html); live production metrics remain private.
 
@@ -149,7 +151,7 @@ carrying several hundred metrics.
 <details>
 <summary><strong>Dark theme and mobile screenshots</strong></summary>
 
-![Alo dark desktop theme](docs/screenshots/desktop-dark.png)
+![Alo dark desktop theme](docs/screenshots/desktop-dark.jpg)
 
 <img src="docs/screenshots/mobile.png" width="390" alt="The Alo dashboard on a narrow screen: gauges reflow to two columns, charts and collapsible telemetry sections stack">
 

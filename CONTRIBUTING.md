@@ -49,7 +49,7 @@ php tests/render_fixture.php > /tmp/alo-preview.html
 python3 -m http.server 8081 --bind 127.0.0.1 --directory /tmp
 ```
 
-Open `http://127.0.0.1:8081/alo-preview.html` with a 1440×1100 desktop viewport, then capture the viewport (1440×1100). Select Clarity/light and Pulse/dark explicitly. Repeat in dark mode, and at 390×844 for mobile. The fixture marks the page as illustrative sample data. Save screenshots to `docs/screenshots/desktop.png`, `desktop-dark.png`, and `mobile.png`. Verify no horizontal overflow, cropped controls, or private data. The production probe has no fixture route. The documentation build renders this CLI-only fixture into static public `demo.html`; it must never call a live collector.
+Open `http://127.0.0.1:8081/alo-preview.html` with a desktop viewport around 1440×1100, then capture the viewport. Record the actual image dimensions (the 2.2 cloud captures are 1348×926). Select Clarity/light and Pulse/dark explicitly. Repeat in dark mode, and at 390×844 for mobile. The fixture marks the page as illustrative sample data. Save screenshots to `docs/screenshots/desktop.jpg`, `desktop-dark.jpg`, and `mobile.png`. Verify no horizontal overflow, cropped controls, or private data. The production probe has no fixture route. The documentation build renders this CLI-only fixture into static public `demo.html`; it must never call a live collector.
 
 ## Pull request checklist
 
