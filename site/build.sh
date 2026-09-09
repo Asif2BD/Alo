@@ -92,7 +92,7 @@ p,li{max-width:72ch}
 .pills li{border:1px solid var(--line);border-radius:999px;padding:.25rem .8rem;font-size:.85rem;color:var(--mut);background:var(--card)}
 .grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));padding:0;list-style:none;margin:1rem 0}
 .grid li{background:var(--card);border:1px solid var(--line);border-radius:.7rem;padding:1rem 1.1rem}
-.grid b{display:block;margin-bottom:.2rem}
+.grid>li>b{display:block;margin-bottom:.2rem}
 .grid span{color:var(--mut);font-size:.93rem}
 pre{background:var(--code);border:1px solid var(--line);border-radius:.6rem;padding:.9rem 1rem;overflow-x:auto;font-size:.88rem;line-height:1.55}
 code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
@@ -152,12 +152,12 @@ footer{border-top:1px solid var(--line);margin-top:3.5rem;padding:1.75rem 0 2.5r
     <h2>What it shows</h2>
     <p>The dashboard opens with radial gauges, a CPU-time breakdown, a memory composition bar and per-core utilisation. Everything else stacks into collapsible sections, so the page stays readable while carrying several hundred metrics.</p>
     <ul class="grid">
-      <li><b>Processor</b><span>Per-core busy percentages and where CPU time went — user, nice, system, I/O wait, <b>steal</b>, IRQ, idle — plus load, runnable and blocked processes, context switches and interrupts.</span></li>
+      <li><b>Processor</b><span>Per-core busy percentages and where CPU time went — user, nice, system, I/O wait, <strong>steal</strong>, IRQ, idle — plus load, runnable and blocked processes, context switches and interrupts.</span></li>
       <li><b>Memory</b><span>The full composition: used, available, cache, buffers, anonymous, mapped, dirty, writeback, slab, page tables, commit limit and swap.</span></li>
       <li><b>Pressure</b><span>Pressure Stall Information for CPU, memory and I/O over 10, 60 and 300 seconds — contention that a utilisation percentage hides entirely.</span></li>
       <li><b>Storage</b><span>Every mounted filesystem with its own usage, then cumulative per-device reads, writes, bytes and busy time.</span></li>
       <li><b>Network and sockets</b><span>Per-interface counters with link speed, MTU and state, plus TCP and UDP counters, established connections and the retransmit rate.</span></li>
-      <li><b>Containers</b><span>Cgroup v2 memory with its soft limit and peak, <b>OOM kills</b>, <b>CPU throttled periods</b>, and process counts against the limit.</span></li>
+      <li><b>Containers</b><span>Cgroup v2 memory with its soft limit and peak, <strong>OOM kills</strong>, <strong>CPU throttled periods</strong>, and process counts against the limit.</span></li>
       <li><b>Kernel</b><span>Distribution, kernel version, file-descriptor usage, CPU temperature, scaling governor, entropy and selected sysctls.</span></li>
       <li><b>PHP and OPcache</b><span>Version and branch lifecycle, configuration, extensions with versions, PDO drivers; OPcache memory, hit rate, restarts, interned strings and JIT.</span></li>
       <li><b>Observations</b><span>Container throttling, cgroup OOM kills, sustained pressure, hypervisor steal, descriptor exhaustion, TCP retransmits and risky PHP settings — each with a next step.</span></li>
