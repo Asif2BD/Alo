@@ -14,7 +14,7 @@
 
 [Install](#install-in-one-line) · [What it shows](#what-it-shows) · [AI & MCP](docs/agents.md) · [Server support](docs/hosting.md) · [Security](SECURITY.md) · [Contribute](CONTRIBUTING.md)
 
-![Alo desktop dashboard with resource cards and actionable observations](docs/screenshots/desktop.png)
+![The Alo dashboard: six radial gauges for CPU, memory, disk, cgroup memory, swap and file descriptors, a CPU-time breakdown separating steal and I/O wait, a memory composition bar, per-core utilisation, and collapsible sections of full telemetry](docs/screenshots/desktop.png)
 
 *Actual Alo interface rendered with illustrative sample data. This is not a live server or benchmark.*
 
@@ -128,7 +128,7 @@ carrying several hundred metrics.
 
 ![Alo dark desktop theme](docs/screenshots/desktop-dark.png)
 
-<img src="docs/screenshots/mobile.png" width="390" alt="Alo mobile dashboard showing responsive resource cards and observations">
+<img src="docs/screenshots/mobile.png" width="390" alt="The Alo dashboard on a narrow screen: gauges reflow to two columns, charts and collapsible telemetry sections stack">
 
 *Screenshots use the same illustrative fixture, not production measurements.*
 

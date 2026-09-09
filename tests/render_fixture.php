@@ -84,7 +84,7 @@ $data['container'] += ['scope' => 'Visible cgroup v2 root.', 'note' => 'Null lim
     'cpu_throttled_usec' => 8820000.0, 'cpu_throttled_percent' => 0.14,
     'pids_current' => 148.0, 'pids_max' => 4096.0];
 $data['kernel'] = ['distribution' => 'Ubuntu 24.04.4 LTS', 'kernel_version' => '6.8.0-51-generic',
-    'open_files' => 14208.0, 'open_files_max' => 9223372036854775807.0, 'open_files_percent' => 0.0,
+    'open_files' => 14208.0, 'open_files_max' => null, 'open_files_limited' => false, 'open_files_percent' => null,
     'cpu_temperature_c' => 48.2, 'cpu_governor' => 'performance', 'entropy_available' => 256.0,
     'sysctl' => ['vm.swappiness' => '60', 'vm.overcommit_memory' => '0', 'vm.dirty_ratio' => '20',
         'kernel.pid_max' => '4194304', 'net.core.somaxconn' => '4096',

@@ -163,7 +163,7 @@ footer{border-top:1px solid var(--line);margin-top:3.5rem;padding:1.75rem 0 2.5r
       <li><b>Observations</b><span>Container throttling, cgroup OOM kills, sustained pressure, hypervisor steal, descriptor exhaustion, TCP retransmits and risky PHP settings — each with a next step.</span></li>
     </ul>
     <figure>
-      <img src="/img/dashboard.png" alt="The Alo dashboard showing resource cards for CPU, memory and disk alongside a list of configuration observations" width="1600" height="1000" loading="lazy" decoding="async">
+      <img src="/img/dashboard.png" alt="The Alo dashboard: radial gauges for CPU, memory, disk, cgroup memory, swap and file descriptors, a CPU-time breakdown, a memory composition bar, per-core utilisation, and collapsible sections of full telemetry" width="1440" height="2300" loading="lazy" decoding="async">
       <figcaption>The Alo dashboard, rendered with illustrative sample data. This is not a live server or a benchmark.</figcaption>
     </figure>
     <p>Alo identifies the web server family — LiteSpeed and OpenLiteSpeed, Nginx, Apache, Caddy and IIS — wherever the runtime exposes identification.</p>
