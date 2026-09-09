@@ -120,6 +120,7 @@ footer{border-top:1px solid var(--line);margin-top:3.5rem;padding:1.75rem 0 2.5r
         <li><a href="#start">Quick start</a></li>
         <li><a href="#agents">For AI agents</a></li>
         <li><a href="#security">Security</a></li>
+        <li><a href="#pricing">Pricing</a></li>
         <li><a href="#faq">FAQ</a></li>
         <li><a href="https://github.com/Asif2BD/Alo">GitHub</a></li>
       </ul>
@@ -225,6 +226,12 @@ footer{border-top:1px solid var(--line);margin-top:3.5rem;padding:1.75rem 0 2.5r
     <details><summary>What licence is it under?</summary><p>GPL-3.0-only. The source is on <a href="https://github.com/Asif2BD/Alo">GitHub</a>, and contributions are welcome.</p></details>
   </section>
 
+  <section id="pricing">
+    <h2>What it costs</h2>
+    <p>Nothing. Alo is free software under <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0-only</a>: one perpetual, no-cost licence covering the whole tool, on as many servers as you like.</p>
+    <p>There is no paid tier, no subscription, no hosted plan, no licence key and no usage limit. You run it on your own server, and it never contacts a vendor — including this one.</p>
+  </section>
+
   <section id="docs">
     <h2>Documentation</h2>
     <ul>
@@ -291,12 +298,35 @@ footer{border-top:1px solid var(--line);margin-top:3.5rem;padding:1.75rem 0 2.5r
         "Authenticated JSON snapshot and capability manifest",
         "Read-only Model Context Protocol endpoint with three tools"
       ],
+      "isAccessibleForFree": true,
       "offers": {
-        "@type": "Offer",
-        "price": "0",
+        "@type": "AggregateOffer",
         "priceCurrency": "USD",
+        "lowPrice": "0",
+        "highPrice": "0",
+        "offerCount": 1,
         "availability": "https://schema.org/InStock",
-        "category": "Free and open source software"
+        "offers": [
+          {
+            "@type": "Offer",
+            "name": "Alo, complete",
+            "description": "The whole of Alo, free under GPL-3.0-only. There is no paid tier, no subscription, no hosted plan and no licence key. Self-hosted on your own server.",
+            "price": "0",
+            "priceCurrency": "USD",
+            "availability": "https://schema.org/InStock",
+            "category": "Free and open source software",
+            "url": "https://github.com/Asif2BD/Alo",
+            "seller": { "@id": "https://alo.asif.dev/#author" },
+            "eligibleCustomerType": "https://schema.org/Enduser",
+            "priceSpecification": {
+              "@type": "UnitPriceSpecification",
+              "price": "0",
+              "priceCurrency": "USD",
+              "valueAddedTaxIncluded": true,
+              "unitText": "perpetual, per installation"
+            }
+          }
+        ]
       }
     },
     {
@@ -402,6 +432,12 @@ response is `no-store` and `noindex`. Deploy Alo behind a VPN, an administrator
 IP allowlist, or an identity-aware proxy, and rate-limit failed authentication
 there.
 
+## What it costs
+
+Nothing. Alo is free software under GPL-3.0-only: one perpetual, no-cost licence
+covering the whole tool, on as many servers as you like. There is no paid tier,
+no subscription, no hosted plan, no licence key and no usage limit.
+
 ## Documentation
 
 - Overview and setup: /docs/readme.md
@@ -415,66 +451,78 @@ MD
 # robots.txt — D1, B1 (Content Signals), B2 (explicit AI bot rules)
 # =====================================================================
 cat > "$PUB/robots.txt" <<'ROBOTS'
-# alo.asif.dev — documentation for Alo, a read-only server probe.
-# The probe itself (/alo.php) is token-protected and sends X-Robots-Tag: noindex.
-
-# Content Signals Policy — https://contentsignals.org/
-# search:   may appear in search results
-# ai-input: may be retrieved to answer a user's question, with attribution
-# ai-train: may not be used to train a generative model
-Content-Signal: search=yes, ai-input=yes, ai-train=no
-
 User-agent: *
 Content-Signal: search=yes, ai-input=yes, ai-train=no
 Allow: /
 Disallow: /alo.php
 
-# Retrieval and answer engines — welcome, attribution expected.
 User-agent: OAI-SearchBot
+Content-Signal: search=yes, ai-input=yes, ai-train=no
 Allow: /
 Disallow: /alo.php
 
 User-agent: ChatGPT-User
+Content-Signal: search=yes, ai-input=yes, ai-train=no
 Allow: /
 Disallow: /alo.php
 
 User-agent: PerplexityBot
+Content-Signal: search=yes, ai-input=yes, ai-train=no
 Allow: /
 Disallow: /alo.php
 
 User-agent: Claude-User
+Content-Signal: search=yes, ai-input=yes, ai-train=no
 Allow: /
 Disallow: /alo.php
 
 User-agent: Claude-SearchBot
+Content-Signal: search=yes, ai-input=yes, ai-train=no
 Allow: /
 Disallow: /alo.php
 
 User-agent: Google-Extended
+Content-Signal: search=yes, ai-input=yes, ai-train=no
 Allow: /
 Disallow: /alo.php
 
 User-agent: Applebot-Extended
+Content-Signal: search=yes, ai-input=yes, ai-train=no
 Allow: /
 Disallow: /alo.php
 
-# Model-training crawlers — declined, consistent with ai-train=no above.
 User-agent: GPTBot
+Content-Signal: search=yes, ai-input=yes, ai-train=no
 Disallow: /
 
 User-agent: ClaudeBot
+Content-Signal: search=yes, ai-input=yes, ai-train=no
 Disallow: /
 
 User-agent: CCBot
+Content-Signal: search=yes, ai-input=yes, ai-train=no
 Disallow: /
 
 User-agent: Meta-ExternalAgent
+Content-Signal: search=yes, ai-input=yes, ai-train=no
 Disallow: /
 
 User-agent: Bytespider
+Content-Signal: search=yes, ai-input=yes, ai-train=no
 Disallow: /
 
 Sitemap: https://alo.asif.dev/sitemap.xml
+
+# alo.asif.dev is documentation for Alo, a read-only server probe.
+# The probe itself (/alo.php) is token-protected and sends
+# X-Robots-Tag: noindex on every response, so it is disallowed above.
+#
+# Content Signals Policy — https://contentsignals.org/
+#   search=yes    may appear in search results
+#   ai-input=yes  may be retrieved to answer a question, with attribution
+#   ai-train=no   may not be used to train a generative model
+#
+# The model-training crawlers below are declined, consistent with ai-train=no.
 ROBOTS
 
 # =====================================================================
