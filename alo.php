@@ -202,10 +202,14 @@ function kernelInfo(): array
             break;
         }
     }
+    // A kernel with no descriptor ceiling reports LONG_MAX here. A percentage of
+    // that is meaningless, so leave it null rather than implying 0% headroom.
+    $boundedFiles = $fileMax !== null && $fileMax > 0 && $fileMax < 4.6e18;
     return ['distribution' => $pretty,
         'kernel_version' => $version !== null && preg_match('/^Linux version (\S+)/', $version, $k) ? $k[1] : null,
-        'open_files' => $allocated, 'open_files_max' => $fileMax,
-        'open_files_percent' => percent($allocated, $fileMax),
+        'open_files' => $allocated, 'open_files_max' => $boundedFiles ? $fileMax : null,
+        'open_files_limited' => $boundedFiles,
+        'open_files_percent' => $boundedFiles ? percent($allocated, $fileMax) : null,
         'cpu_temperature_c' => $temperature,
         'cpu_governor' => $sysctl('/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor'),
         'entropy_available' => is_numeric($sysctl('/proc/sys/kernel/random/entropy_avail') ?? '') ? (float) $sysctl('/proc/sys/kernel/random/entropy_avail') : null,
@@ -1037,7 +1041,7 @@ function withDefaults(array $data): array
 {
     $data['kernel'] = ($data['kernel'] ?? []) + ['distribution' => null, 'kernel_version' => null,
         'open_files' => null, 'open_files_max' => null, 'open_files_percent' => null,
-        'cpu_temperature_c' => null, 'cpu_governor' => null, 'entropy_available' => null,
+        'cpu_temperature_c' => null, 'cpu_governor' => null, 'entropy_available' => null, 'open_files_limited' => false,
         'sysctl' => [], 'note' => 'Kernel build host, hostname, and addresses are deliberately not collected.'];
     $data['pressure'] = ($data['pressure'] ?? []) + ['cpu' => parsePressure(null), 'memory' => parsePressure(null), 'io' => parsePressure(null)];
     $data['paging'] = ($data['paging'] ?? []) + ['page_faults' => null, 'major_page_faults' => null,
@@ -1057,13 +1061,17 @@ function withDefaults(array $data): array
     $data['cpu']['breakdown'] = ($data['cpu']['breakdown'] ?? []) + cpuBreakdown(null, null);
     $data['cpu']['scheduler'] = ($data['cpu']['scheduler'] ?? []) + schedulerInfo(null);
     $data['container'] = ($data['container'] ?? []) + ['scope' => 'Visible cgroup v2 root.',
-        'note' => 'Null limits mean unlimited or unavailable.', 'version' => null, 'memory_high_bytes' => null,
+        'note' => 'Null limits mean unlimited or unavailable.', 'version' => null,
+        'memory_used_bytes' => null, 'memory_limit_bytes' => null, 'memory_used_percent' => null,
+        'cpu_quota_cores' => null, 'memory_high_bytes' => null,
         'memory_peak_bytes' => null, 'memory_swap_used_bytes' => null, 'memory_anon_bytes' => null,
         'memory_file_bytes' => null, 'memory_slab_bytes' => null, 'cpu_usage_usec' => null,
         'cpu_periods' => null, 'cpu_throttled_periods' => null, 'cpu_throttled_usec' => null,
         'cpu_throttled_percent' => null, 'pids_current' => null, 'pids_max' => null];
     $data['container']['memory_events'] = ($data['container']['memory_events'] ?? []) + array_fill_keys(['low', 'high', 'max', 'oom', 'oom_kill'], null);
-    $data['opcache'] = ($data['opcache'] ?? []) + array_fill_keys(['wasted_percent', 'cached_keys',
+    $data['opcache'] = ($data['opcache'] ?? []) + array_fill_keys(['available', 'enabled', 'used_bytes',
+        'free_bytes', 'wasted_bytes', 'hit_rate_percent', 'cached_scripts', 'restart_pending',
+        'wasted_percent', 'cached_keys',
         'max_cached_keys', 'hits', 'misses', 'oom_restarts', 'hash_restarts', 'manual_restarts',
         'interned_used_bytes', 'interned_free_bytes', 'interned_strings', 'jit_enabled',
         'jit_buffer_bytes', 'jit_buffer_free_bytes', 'realpath_cache_bytes'], null);
@@ -1089,11 +1097,16 @@ function render(array $data, string $nonce): void
         . gauge($data['disk']['used_percent'], 'Disk', bytes($data['disk']['free_bytes']) . ' free on the probe filesystem')
         . gauge($container['memory_used_percent'], 'Cgroup memory', $container['memory_limit_bytes'] === null ? 'No visible limit' : bytes($container['memory_limit_bytes']) . ' limit')
         . gauge($memory['swap_used_percent'], 'Swap', bytes($memory['swap_used_bytes']) . ' of ' . bytes($memory['swap_total_bytes']))
-        . gauge($kernel['open_files_percent'], 'Open files', num($kernel['open_files']) . ' of ' . num($kernel['open_files_max']));
+        . gauge($kernel['open_files_percent'], 'Open files', ($kernel['open_files_limited'] ?? false)
+            ? num($kernel['open_files']) . ' of ' . num($kernel['open_files_max'])
+            : num($kernel['open_files']) . ' open · no kernel ceiling');
 
     $breakdown = $cpu['breakdown'];
+    // Every field of the /proc/stat delta must appear, or the bar will not sum to
+    // 100% -- a niced process once ate 90% and simply was not drawn.
     $cpuStack = stackBar([
-        ['User', $breakdown['user_percent'], 'a'], ['System', $breakdown['system_percent'], 'b'],
+        ['User', $breakdown['user_percent'], 'a'], ['Nice', $breakdown['nice_percent'], 'g'],
+        ['System', $breakdown['system_percent'], 'b'],
         ['I/O wait', $breakdown['iowait_percent'], 'c'], ['Steal', $breakdown['steal_percent'], 'f'],
         ['IRQ', ($breakdown['irq_percent'] ?? 0) + ($breakdown['softirq_percent'] ?? 0), 'e'],
         ['Idle', $breakdown['idle_percent'], 'd'],
@@ -1122,8 +1135,8 @@ function render(array $data, string $nonce): void
 <meta name="color-scheme" content="light dark"><meta name="robots" content="noindex,nofollow,noarchive">
 <title>Alo — Server overview</title>
 <style nonce="<?= escape($nonce) ?>">
-:root{color-scheme:light;--bg:#f5f4ef;--panel:#fff;--ink:#182d34;--muted:#52636a;--line:#dce1dd;--accent:#c04c25;--green:#27694f;--soft:#e9f1e9;--warn:#8a420d;--red:#ad3030;--blue:#2b5f7e;--violet:#5a4a8a;--sand:#b08b3f}
-@media(prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#142126;--panel:#1b2b31;--ink:#eff2ed;--muted:#b0bebf;--line:#36474c;--accent:#ffa077;--green:#8bd0aa;--soft:#273f35;--warn:#f2b574;--red:#ff9292;--blue:#8ec6e8;--violet:#b6a6e8;--sand:#e4c37e}}
+:root{color-scheme:light;--bg:#f5f4ef;--panel:#fff;--ink:#182d34;--muted:#52636a;--line:#dce1dd;--accent:#c04c25;--green:#27694f;--soft:#e9f1e9;--warn:#8a420d;--red:#ad3030;--blue:#2b5f7e;--violet:#5a4a8a;--sand:#b08b3f;--teal:#2f7d72}
+@media(prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#142126;--panel:#1b2b31;--ink:#eff2ed;--muted:#b0bebf;--line:#36474c;--accent:#ffa077;--green:#8bd0aa;--soft:#273f35;--warn:#f2b574;--red:#ff9292;--blue:#8ec6e8;--violet:#b6a6e8;--sand:#e4c37e;--teal:#7fd0c4}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 a{color:inherit}
@@ -1159,10 +1172,10 @@ h3{font-size:14px;margin:22px 0 8px;color:var(--muted);text-transform:uppercase;
 .subtitle{color:var(--muted);font-size:13px;margin:6px 0 0}
 .duo{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .stack{width:100%;height:20px;display:block;border-radius:6px;overflow:hidden}
-.seg.a{fill:var(--green)}.seg.b{fill:var(--blue)}.seg.c{fill:var(--sand)}.seg.d{fill:var(--line)}.seg.e{fill:var(--violet)}.seg.f{fill:var(--red)}
+.seg.a{fill:var(--green)}.seg.b{fill:var(--blue)}.seg.c{fill:var(--sand)}.seg.d{fill:var(--line)}.seg.e{fill:var(--violet)}.seg.f{fill:var(--red)}.seg.g{fill:var(--teal)}
 .legend{list-style:none;display:flex;flex-wrap:wrap;gap:8px 18px;padding:0;margin:13px 0 0;font-size:12.5px;color:var(--muted)}
 .swatch{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:7px;vertical-align:middle}
-.swatch.a{background:var(--green)}.swatch.b{background:var(--blue)}.swatch.c{background:var(--sand)}.swatch.d{background:var(--line)}.swatch.e{background:var(--violet)}.swatch.f{background:var(--red)}
+.swatch.a{background:var(--green)}.swatch.b{background:var(--blue)}.swatch.c{background:var(--sand)}.swatch.d{background:var(--line)}.swatch.e{background:var(--violet)}.swatch.f{background:var(--red)}.swatch.g{background:var(--teal)}
 .cols{width:100%;height:auto;display:block}
 .col-track{fill:var(--line);opacity:.4}
 .col.ok{fill:var(--green)}.col.warn{fill:var(--warn)}.col.crit{fill:var(--red)}.col.unknown{fill:var(--line)}
@@ -1239,7 +1252,8 @@ Snapshot <time><?= escape($data['collected_at']) ?></time><br>
 echo drawer('Processor', ($cpu['model'] ?? 'CPU model unavailable') . ' · ' . num($cpu['logical_cores']) . ' logical', facts([
     'Model' => $cpu['model'], 'Logical cores' => $cpu['logical_cores'], 'Physical packages' => $cpu['physical_packages'],
     'Clock' => $cpu['mhz'] === null ? null : num($cpu['mhz'], 0) . ' MHz', 'Cache' => $cpu['cache'],
-    'Busy' => pct($cpu['busy_percent']), 'User' => pct($breakdown['user_percent']), 'System' => pct($breakdown['system_percent']),
+    'Busy' => pct($cpu['busy_percent']), 'User' => pct($breakdown['user_percent']),
+    'Nice' => pct($breakdown['nice_percent']), 'System' => pct($breakdown['system_percent']),
     'I/O wait' => pct($breakdown['iowait_percent']), 'Steal' => pct($breakdown['steal_percent']),
     'IRQ / softirq' => pct($breakdown['irq_percent']) . ' / ' . pct($breakdown['softirq_percent']),
     'Load 1 / 5 / 15 min' => implode(' / ', array_map(static fn ($v): string => $v === null ? '—' : number_format($v, 2), [$cpu['load_1m'], $cpu['load_5m'], $cpu['load_15m']])),
@@ -1322,8 +1336,10 @@ echo drawer('Kernel and sysctl', $kernel['kernel_version'] ?? 'Kernel unavailabl
     '<p class="subtitle">' . escape($kernel['note']) . '</p>'
     . facts([
         'Distribution' => $kernel['distribution'], 'Kernel' => $kernel['kernel_version'],
-        'Open files' => num($kernel['open_files']) . ' of ' . num($kernel['open_files_max']),
-        'Open files %' => pct($kernel['open_files_percent'], 2), 'Entropy available' => num($kernel['entropy_available']),
+        'Open files' => ($kernel['open_files_limited'] ?? false)
+            ? num($kernel['open_files']) . ' of ' . num($kernel['open_files_max'])
+            : num($kernel['open_files']) . ' (no kernel ceiling)',
+        'Open files %' => ($kernel['open_files_limited'] ?? false) ? pct($kernel['open_files_percent'], 2) : 'Not limited', 'Entropy available' => num($kernel['entropy_available']),
     ] + array_combine(array_keys($kernel['sysctl']), array_values($kernel['sysctl']))));
 
 echo drawer('PHP runtime', 'PHP ' . $data['runtime']['php_version'] . ' · ' . $data['runtime']['sapi'], facts([
