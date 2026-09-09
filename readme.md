@@ -7,7 +7,7 @@
 
 [![CI](https://github.com/Asif2BD/Alo/actions/workflows/ci.yml/badge.svg)](https://github.com/Asif2BD/Alo/actions/workflows/ci.yml)
 [![PHP](https://img.shields.io/badge/PHP-8.3%20%7C%208.4%20%7C%208.5-777bb4)](https://www.php.net/supported-versions.php)
-[![tests](https://img.shields.io/badge/tests-171%20passing-2ea44f)](tests/)
+[![tests](https://img.shields.io/badge/tests-191%20passing-2ea44f)](tests/)
 [![dependencies](https://img.shields.io/badge/dependencies-none-2ea44f)](#)
 [![deploy](https://img.shields.io/badge/deploy-one%20file-orange)](#install-in-one-line)
 [![license](https://img.shields.io/badge/license-GPL--3.0--only-blue)](gpl-3.0.txt)
@@ -184,13 +184,36 @@ This is a breaking replacement. Configure authentication and HTTPS before switch
 
 Public `phpinfo`, JSONP/realtime routes, function tests, database connection tests, mail sending, I/O tests, and stress/speed benchmarks are removed. Migrate consumers to the authenticated JSON/MCP interfaces. Renaming the file is no longer treated as access control.
 
+## Telemetry for a fleet
+
+Alo is a scrape target, not an agent. It never makes an outbound request, so a server manager pulls from
+it on its own schedule and Alo keeps no state between calls.
+
+```sh
+curl -H "Authorization: Bearer $TOKEN" "https://host/alo.php?format=metrics&sample=0"
+```
+
+`?format=metrics` returns **OpenMetrics 1.0**. Cumulative series are typed as counters and exported raw —
+the scraper differentiates two scrapes into a rate, which is why Alo needs no history and no database.
+Percentages are exported as `0–1` ratios. **A reading Alo could not take is omitted entirely**, never
+exported as zero, because a zero averages into a dashboard as though it had been measured.
+
+| Lever | Why |
+| --- | --- |
+| `?sample=0` | Skips the CPU sampling sleep, which is most of a request's cost. Busy percentages come back `null` instead of fabricated. Everything else is unaffected |
+| `?fields=memory,disk` | Trims a JSON snapshot to the families you asked for |
+| `ALO_INSTANCE=web-01` | Labels the instance for a fleet. Alo never derives an identity from a hostname or address |
+| `Server-Timing` | Every response reports what collection cost |
+
+Set the interval no tighter than 30 seconds, and prefer `sample=0` below 60.
+
 ## Tests
 
-**171 automated checks** run on every push against **PHP 8.3, 8.4 and 8.5**:
+**191 automated checks** run on every push against **PHP 8.3, 8.4 and 8.5**:
 
 ```sh
 php tests/run.php        # 106 checks: parsers, chart geometry, insights, escaping
-python3 tests/test_http.py # 65 checks: real HTTP, auth, MCP, install
+python3 tests/test_http.py # 85 checks: real HTTP, auth, MCP, install
 ```
 
 They cover the metric parsers against fixture procfs data, the chart helpers' clamping and escaping,
