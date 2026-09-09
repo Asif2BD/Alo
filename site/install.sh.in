@@ -1,0 +1,36 @@
+#!/bin/sh
+# Alo installer. The bootstrap is trusted via HTTPS; the payload hash pins the
+# exact build and detects corruption. It is not an independent signature.
+set -eu
+PHP_BIN=${PHP_BINARY:-php}
+destination=.
+setup=false
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --dir) [ "$#" -ge 2 ] || exit 2; destination=$2; shift 2 ;;
+    --setup) setup=true; shift ;;
+    *) echo 'Usage: sh install.sh [--dir WEB_DIRECTORY] [--setup]' >&2; exit 2 ;;
+  esac
+done
+[ -d "$destination" ] || { echo 'Destination must already exist.' >&2; exit 1; }
+"$PHP_BIN" -r 'exit(PHP_VERSION_ID >= 80300 && PHP_INT_SIZE === 8 ? 0 : 1);' || { echo '64-bit PHP 8.3+ required. Set PHP_BINARY to select it.' >&2; exit 1; }
+cd "$destination"
+[ ! -L alo.php ] && { [ ! -e alo.php ] || [ -f alo.php ]; } || { echo 'Refusing a symlink or non-file destination.' >&2; exit 1; }
+# A private temporary file on the destination filesystem permits atomic rename.
+umask 077
+staged=$(mktemp .alo-install.XXXXXXXX)
+trap 'rm -f "$staged"' EXIT HUP INT TERM
+curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --max-time 60 '@SITE@/downloads/alo-@SHA@.txt' -o "$staged"
+"$PHP_BIN" -r 'exit(hash_file("sha256", $argv[1]) === $argv[2] ? 0 : 1);' "$staged" '@SHA@' || { echo 'Payload verification failed; existing installation was not changed.' >&2; exit 1; }
+"$PHP_BIN" -l "$staged" >/dev/null
+# Code has no embedded secrets. The credential digest sidecar is never replaced.
+chmod 644 "$staged"
+mv -f "$staged" alo.php
+printf '%s\n' 'Installed Alo @VERSION@ (SHA-256 @SHA@). Existing access configuration preserved.' >&2
+if "$PHP_BIN" alo.php --check --json >/dev/null; then
+  "$PHP_BIN" alo.php --check --json
+elif [ "$setup" = true ]; then
+  "$PHP_BIN" alo.php --setup
+else
+  printf '%s\n' 'Run php alo.php --setup as the site user; verify the HTTPS endpoint before use.' >&2
+fi

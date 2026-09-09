@@ -28,3 +28,10 @@ jobs:
         run: php -d disable_functions=file_get_contents,sys_getloadavg,disk_total_space,disk_free_space,opcache_get_status alo.php --json | python3 -m json.tool > /dev/null
       - name: Screenshot fixture smoke check
         run: php tests/render_fixture.php > /tmp/alo-preview.html
+      - name: Session deltas and installer integrity
+        run: |
+          node tests/dashboard.mjs
+          python3 tests/test_install.py
+          bash -n site/build.sh
+          sh -n site/install.sh.in
+          bash site/build.sh

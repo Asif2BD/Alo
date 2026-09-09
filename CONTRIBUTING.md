@@ -31,7 +31,7 @@ A helpful bug report includes PHP version/SAPI, OS, web server family, reproduct
 - Use strict types, four-space indentation, explicit return types, and small named functions under the `Alo` namespace. Preserve the GPL header.
 - Authentication must run before collectors. Never add public diagnostics, URL tokens, arbitrary shell commands, user-selected paths/hosts, or secrets to reports.
 - External probes require a separately reviewed allowlist, time/size budgets, and a threat model. Do not silently add network requests or application writes.
-- Treat OS and runtime strings as untrusted. Escape HTML; serialize JSON through `json_encode`; never insert data into executable JavaScript.
+- Treat OS and runtime strings as untrusted. Escape HTML; serialize JSON through `json_encode`; use JSON_HEX_TAG/AMP/APOS/QUOT when embedding JSON inside a nonce-authorized script; never concatenate untrusted code.
 - Use `null` for missing metrics, retain units and collection scope, and distinguish host metrics from container limits. A collector failure must degrade gracefully.
 - Preserve `schema_version: 1` semantics. Additive optional fields are acceptable; breaking meanings require a new version and migration notes.
 - Add meaningful tests for access changes, parser edge cases, threshold calculations, and MCP behavior. Do not replace real HTTP checks with mocks of the implementation.
@@ -49,7 +49,7 @@ php tests/render_fixture.php > /tmp/alo-preview.html
 python3 -m http.server 8081 --bind 127.0.0.1 --directory /tmp
 ```
 
-Open `http://127.0.0.1:8081/alo-preview.html` with a 1440×1100 desktop viewport, then capture a full-page screenshot. Repeat in dark mode, and at 390×844 for mobile. The fixture marks the page as illustrative sample data. Save screenshots to `docs/screenshots/desktop.png`, `desktop-dark.png`, and `mobile.png`. Verify no horizontal overflow, cropped controls, or private data. No preview fixture endpoint exists in the production file.
+Open `http://127.0.0.1:8081/alo-preview.html` with a 1440×1100 desktop viewport, then capture the viewport (1440×1100). Select Clarity/light and Pulse/dark explicitly. Repeat in dark mode, and at 390×844 for mobile. The fixture marks the page as illustrative sample data. Save screenshots to `docs/screenshots/desktop.png`, `desktop-dark.png`, and `mobile.png`. Verify no horizontal overflow, cropped controls, or private data. The production probe has no fixture route. The documentation build renders this CLI-only fixture into static public `demo.html`; it must never call a live collector.
 
 ## Pull request checklist
 
@@ -66,3 +66,9 @@ Open `http://127.0.0.1:8081/alo-preview.html` with a 1440×1100 desktop viewport
 Alo's language-neutral JSON contract is the extension boundary. See [the roadmap](docs/roadmap.md) before adding a collector for Node.js, Python, Go, databases, or server-native metrics. New runtime collectors must reuse the units, scope, timestamp, and access principles rather than embedding remote administration in the PHP probe.
 
 Contributions are distributed under the project's GPL-3.0-only license. Be respectful, specific, and constructive in reviews.
+
+## Working on the three experiences
+
+Keep Clarity and Pulse in the single-file renderer with shared metrics and insight rules. View choice and color theme are independent; persist only those preferences. Use Launch for public discovery and installation. All graphics must disclose units, scope, time window and unavailable readings; sample charts must be explicitly labeled. Session memory is bounded and must stop on errors. Never add automatic remediation or background collection without a separate design.
+
+Run `node tests/dashboard.mjs` for reset/gap/unit regressions, and `python3 tests/test_install.py` for installer tamper rejection and preservation. `bash site/build.sh` renders the public sample without collecting host data. For a hosting change, document actual runtime validation separately from fixtures. Commit updated sample screenshots, README, agent contract and discovery metadata together.

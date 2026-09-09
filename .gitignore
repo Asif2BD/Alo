@@ -21,3 +21,8 @@ __pycache__/
 
 # Generated documentation site
 public/
+
+# Private local access configuration
+alo-hash.php
+.alo-digest-*
+.alo-install.*
