@@ -525,6 +525,13 @@ Sitemap: https://alo.asif.dev/sitemap.xml
 # The model-training crawlers below are declined, consistent with ai-train=no.
 ROBOTS
 
+# xCloud's generated vhost carries a WordPress-era server-level rewrite,
+# "rewrite ^/robots.txt$ /index.php last;", which fires before any location
+# matches and sends /robots.txt to PHP. A custom nginx include pre-empts it by
+# rewriting to this identical copy instead, so the file below is what crawlers
+# actually receive.
+cp "$PUB/robots.txt" "$PUB/robots-alo.txt"
+
 # =====================================================================
 # sitemap.xml — D2
 # =====================================================================
