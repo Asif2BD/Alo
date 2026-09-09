@@ -5,9 +5,14 @@
 
 **A private, single-file server dashboard. Built for humans. Ready for AI agents.**
 
-[Quick start](#quick-start) · [AI & MCP](docs/agents.md) · [Server support](docs/hosting.md) · [Contribute](CONTRIBUTING.md) · [Security](SECURITY.md) · [Roadmap](docs/roadmap.md)
+[![CI](https://github.com/Asif2BD/Alo/actions/workflows/ci.yml/badge.svg)](https://github.com/Asif2BD/Alo/actions/workflows/ci.yml)
+[![PHP](https://img.shields.io/badge/PHP-8.3%20%7C%208.4%20%7C%208.5-777bb4)](https://www.php.net/supported-versions.php)
+[![tests](https://img.shields.io/badge/tests-169%20passing-2ea44f)](tests/)
+[![dependencies](https://img.shields.io/badge/dependencies-none-2ea44f)](#)
+[![deploy](https://img.shields.io/badge/deploy-one%20file-orange)](#install-in-one-line)
+[![license](https://img.shields.io/badge/license-GPL--3.0--only-blue)](gpl-3.0.txt)
 
-PHP **8.3–8.5** · **No dependencies** · **Read-only** · **GPLv3**
+[Install](#install-in-one-line) · [What it shows](#what-it-shows) · [AI & MCP](docs/agents.md) · [Server support](docs/hosting.md) · [Security](SECURITY.md) · [Contribute](CONTRIBUTING.md)
 
 ![Alo desktop dashboard with resource cards and actionable observations](docs/screenshots/desktop.png)
 
@@ -15,16 +20,89 @@ PHP **8.3–8.5** · **No dependencies** · **Read-only** · **GPLv3**
 
 </div>
 
+## Install in one line
+
+You need a shell and PHP 8.3+. Nothing else — no pool file to edit, no service to restart, no root.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Asif2BD/Alo/master/alo.php -o alo.php && php alo.php --setup
+```
+
+`--setup` generates a 256-bit token, stores **only its SHA-256 digest**, and prints the token once:
+
+```
+  Alo is ready.
+
+  Username  alo
+  Token     f6f057d1bc5efbebd0be00aaf14606a4db6ae587f799e379fd148305c4afd198
+```
+
+Put `alo.php` somewhere served over HTTPS and open it. That is the whole install.
+
+Run `php alo.php --check` at any time to see whether it is ready and why not.
+
+### Where the digest goes
+
+`--setup` writes `alo-hash.php` next to the probe. It is a PHP file whose first statement is `exit`, so a
+web server willing to run `alo.php` runs this too and returns **nothing** — there is no path by which it
+leaks. It is written `0600`, and it holds a digest, not a credential: it cannot be replayed, and inverting
+SHA-256 over 256 bits of randomness is infeasible.
+
+If you would rather keep the digest off the filesystem entirely, set `ALO_TOKEN_HASH` in the web PHP
+environment instead. **The environment variable always wins**, so a hardened deployment behaves exactly as
+it did before this convenience existed.
+
+### Installing without a shell
+
+Panel, FTP or SFTP only? Run `--setup` on your own machine, then upload **both** `alo.php` and the
+generated `alo-hash.php`. Nothing on the server needs configuring.
+
+### Installing from an agent or a script
+
+Every command is non-interactive and idempotent, with meaningful exit codes.
+
+```sh
+php alo.php --setup --json     # {"ok":true,"token":"...","hash":"...","hash_file":"..."}
+php alo.php --check --json     # readiness report; exit 0 when ready
+```
+
+| Exit | Meaning |
+| --- | --- |
+| `0` | Done |
+| `1` | `--check` only: not ready; see `warnings` |
+| `2` | Unknown argument |
+| `3` | Already configured — refuses to silently invalidate a live token. Add `--force` to rotate |
+| `4` | Could not write the digest; the message includes the `ALO_TOKEN_HASH` value to set instead |
+
+An agent pushing Alo to a fleet can therefore run the one-liner, parse the token out of
+`--setup --json`, store it in its own secret store, and verify with `--check --json` — without a human
+in the loop, and without ever leaving the token on the server.
+
+For containers and immutable infrastructure, skip `--setup` and pass the digest in:
+
+```sh
+docker run -e ALO_TOKEN_HASH=$(php -r 'echo hash("sha256", "YOUR-TOKEN");') ...
+```
+
+### Rotating or removing
+
+```sh
+php alo.php --setup --force    # new token, old one stops working immediately
+rm alo-hash.php                # back to locked; Alo returns 503 and collects nothing
+```
+
 ## Why Alo?
 
-Understand the environment serving your application without installing a monitoring stack. Upload one PHP file, authenticate, and see the resource usage, runtime details, and configuration observations that matter. Alo never sends telemetry or loads third-party assets.
+Understand the environment serving your application without installing a monitoring stack. Upload one file,
+authenticate, and see the resource usage, runtime details and configuration observations that matter. Alo
+never sends telemetry or loads third-party assets.
 
 | For people | For agents | For administrators |
 | --- | --- | --- |
 | Clean, responsive dashboard | Authenticated JSON snapshots | HTTPS and generated access tokens |
-| Light and dark themes | Read-only MCP tools | No shell execution or database credentials |
-| Resource pressure explained | Explicit units, scope, and missing data | Locked until configured |
-| Manual refresh and JSON export | Machine-readable capability manifest | One file; no writable app storage |
+| Charts and collapsible detail | Read-only MCP tools | One command to install, one to rotate |
+| Light and dark themes | Explicit units, scope, and missing data | No shell execution or database credentials |
+| Resource pressure explained | Machine-readable capability manifest | One file; the digest is not a credential |
 
 ## What it shows
 
@@ -56,56 +134,29 @@ carrying several hundred metrics.
 
 </details>
 
-## Quick start
+## Manual install
 
-**Requires 64-bit PHP 8.3 or newer; PHP 8.5 is recommended for new installs.** Linux provides the richest system metrics. Other platforms and restricted hosts retain runtime diagnostics and show unavailable readings honestly.
+Prefer to do it by hand, or need the digest in the environment rather than a file?
 
-1. Download `alo.php` from a reviewed release or checkout. Generate an access token through SSH or on your local machine:
+1. Download `alo.php` from a reviewed release or checkout.
+2. Generate a token and digest without writing anything to disk:
 
    ```sh
    php alo.php --generate-token
    ```
 
-2. Save the generated **token** in your password manager. Configure its generated **`ALO_TOKEN_HASH`** in your hosting control panel, PHP-FPM pool, or LSAPI environment, outside the document root. For example, in a PHP-FPM pool:
+3. Set the printed `ALO_TOKEN_HASH` in your control panel, PHP-FPM pool, or LSAPI environment — outside
+   the document root. A PHP-FPM pool with `clear_env` enabled needs an explicit entry:
 
    ```ini
-   ; Replace this placeholder with the generated SHA-256 digest.
-   env[ALO_TOKEN_HASH] = YOUR_GENERATED_64_CHARACTER_HASH
+   env[ALO_TOKEN_HASH] = "<the printed sha256 digest>"
    ```
 
-   Reload the PHP handler after changing its configuration. A shell `export` does not usually configure your web PHP process. See the [hosting guide](docs/hosting.md), including LiteSpeed/OpenLiteSpeed.
+4. Upload only `alo.php` to a location served over HTTPS, and reload the PHP handler.
 
-3. Upload **only `alo.php`**, then open `https://your-domain.example/alo.php`. Sign in with username **`alo`** and the generated **token** as the password. Unconfigured installations stay locked.
-4. Restrict access to administrators and rate-limit requests at the web server or access proxy. Review [SECURITY.md](SECURITY.md) before deployment.
+An installation with no configured digest returns `503` and collects nothing. That is the intended locked
+state, not an error.
 
-There is no public demo URL yet. The project owner will deploy and provide one later. The screenshots above are safe sample data; do not publish production snapshots as a demo.
-
-### Local preview
-
-Set `ALO_TOKEN_HASH` in your local shell first, then:
-
-```sh
-ALO_ALLOW_LOCAL_HTTP=1 php -S 127.0.0.1:8080
-```
-
-Open `http://127.0.0.1:8080/alo.php` and authenticate. The HTTP exception works only for loopback peers on PHP's development server. Never expose or reverse-proxy that server.
-
-### CLI and integrations
-
-```sh
-php alo.php --json
-```
-
-CLI uses local OS permissions. Web integrations use HTTPS with `Authorization: Bearer <token>` or Basic authentication:
-
-| Endpoint | Method | Purpose |
-| --- | --- | --- |
-| `alo.php` | GET | Human dashboard |
-| `alo.php?format=json` | GET | Timestamped snapshot |
-| `alo.php?format=manifest` | GET | Units, semantics, capabilities, agent guidance |
-| `alo.php?format=mcp` | POST | MCP initialize, discovery, and read-only tools |
-
-MCP tools: **`alo_snapshot`**, **`alo_insights`**, and **`alo_capabilities`**. Supports stateless Streamable HTTP with JSON responses and protocol versions `2025-11-25`, `2025-06-18`, and `2025-03-26`. Clients must support a configured Authorization header; OAuth discovery is not implemented. See [agent connection examples and protocol details](docs/agents.md).
 
 ## Server compatibility
 
@@ -133,17 +184,24 @@ This is a breaking replacement. Configure authentication and HTTPS before switch
 
 Public `phpinfo`, JSONP/realtime routes, function tests, database connection tests, mail sending, I/O tests, and stress/speed benchmarks are removed. Migrate consumers to the authenticated JSON/MCP interfaces. Renaming the file is no longer treated as access control.
 
-## Development and contributions
+## Tests
+
+**169 automated checks** run on every push against **PHP 8.3, 8.4 and 8.5**:
 
 ```sh
-php -l alo.php
-php tests/run.php
-python3 tests/test_http.py
+php tests/run.php        # 104 checks: parsers, chart geometry, insights, escaping
+python3 tests/test_http.py # 65 checks: real HTTP, auth, MCP, install
 ```
 
-No Composer install is required. CI covers PHP 8.3, 8.4, and 8.5. The HTTP tests launch isolated loopback servers using test-only credentials. `PHP_BINARY` selects a non-default PHP executable.
+They cover the metric parsers against fixture procfs data, the chart helpers' clamping and escaping,
+every insight threshold, and — over real HTTP against a real PHP server — the access controls, the MCP
+transport, and the install flow including the guarantee that the digest sidecar returns an empty body.
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, screenshot reproduction, design standards, security rules, and PR checklist. [The roadmap](docs/roadmap.md) explains how future collectors can broaden coverage beyond PHP without weakening the access boundary.
+CI additionally runs Alo with `disable_functions` set, to prove that a restricted host degrades to
+"Unavailable" instead of failing.
+
+## Development and contributions
+
 
 ## License and history
 

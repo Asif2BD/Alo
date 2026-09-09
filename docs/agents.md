@@ -2,6 +2,24 @@
 
 Alo exposes the same private snapshot to humans and agents. There are no remediation, shell, file-edit, or database tools.
 
+## Installing Alo from an agent
+
+Every CLI command is non-interactive and idempotent, so an agent can install Alo on a fleet without a
+human present:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Asif2BD/Alo/master/alo.php -o alo.php
+php alo.php --setup --json    # {"ok":true,"token":"...","hash":"...","hash_file":"..."}
+php alo.php --check --json    # exit 0 when ready
+```
+
+Exit `3` means a digest already exists; `--setup` refuses to silently invalidate a live token, so an agent
+re-running the same playbook is safe. Add `--force` only when you intend to rotate. Exit `4` means the
+digest could not be written, and the message carries the `ALO_TOKEN_HASH` value to set instead.
+
+Capture the token from the JSON into your own secret store. The server keeps only the digest, so a token
+that is not captured at install time cannot be recovered.
+
 ## Connect
 
 Use an MCP client that supports **Streamable HTTP and custom Authorization headers**. Configure its server URL and secret through the client's secure credential mechanism:
