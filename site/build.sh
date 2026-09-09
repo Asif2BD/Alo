@@ -137,7 +137,7 @@ footer{border-top:1px solid var(--line);margin-top:3.5rem;padding:1.75rem 0 2.5r
     <li>Read-only</li>
     <li>No telemetry</li>
     <li>GPL-3.0-only</li>
-    <li>Version 2.0.0</li>
+    <li>Version 2.1.0</li>
   </ul>
 
   <section id="what">
@@ -247,7 +247,7 @@ footer{border-top:1px solid var(--line);margin-top:3.5rem;padding:1.75rem 0 2.5r
 
 <footer>
   <div class="wrap">
-    <p>Alo 2.0.0 — a read-only server probe by <a href="https://ar.bd/">M Asif Rahman</a>. Released under <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0-only</a>. Source on <a href="https://github.com/Asif2BD/Alo">GitHub</a>.</p>
+    <p>Alo 2.1.0 — a read-only server probe by <a href="https://ar.bd/">M Asif Rahman</a>. Released under <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0-only</a>. Source on <a href="https://github.com/Asif2BD/Alo">GitHub</a>.</p>
     <p>This page is documentation. The probe running on this host lives at <code>/alo.php</code> and is token-protected.</p>
   </div>
 </footer>
@@ -279,7 +279,7 @@ footer{border-top:1px solid var(--line);margin-top:3.5rem;padding:1.75rem 0 2.5r
       "applicationCategory": "DeveloperApplication",
       "applicationSubCategory": "Server monitoring",
       "operatingSystem": "Linux, macOS, Windows (64-bit PHP 8.3+)",
-      "softwareVersion": "2.0.0",
+      "softwareVersion": "2.1.0",
       "url": "https://alo.asif.dev/",
       "downloadUrl": "https://github.com/Asif2BD/Alo",
       "codeRepository": "https://github.com/Asif2BD/Alo",
@@ -360,7 +360,7 @@ runtime details and configuration risks of the machine serving your application,
 without installing a monitoring stack, an agent, or a database. It serves the same
 snapshot to humans and to AI agents.
 
-- Version: 2.0.0
+- Version: 2.1.0
 - Licence: GPL-3.0-only
 - Requires: 64-bit PHP 8.3–8.5
 - Source: https://github.com/Asif2BD/Alo
@@ -564,6 +564,15 @@ cat > "$PUB/feed.json" <<'FEED'
   "authors": [ { "name": "M Asif Rahman", "url": "https://ar.bd/" } ],
   "items": [
     {
+      "id": "https://alo.asif.dev/#release-2.1.0",
+      "url": "https://alo.asif.dev/",
+      "title": "Alo 2.1.0 — deep telemetry, charts, and collapsible sections",
+      "content_text": "The dashboard now opens with radial gauges, a CPU-time breakdown separating steal and I/O wait, a memory composition bar, and per-core utilisation, then stacks the rest into collapsible sections. New families: Pressure Stall Information for CPU, memory and I/O; paging and OOM counters; every mounted filesystem and per-device I/O; TCP and UDP protocol counters; cgroup memory.events and CPU throttling; kernel, descriptor and sysctl values; and deeper OPcache including JIT and interned strings. Roughly four times the metrics, still one file with no dependencies and no new privileges.",
+      "date_published": "2026-09-09T12:56:18+04:00",
+      "authors": [ { "name": "M Asif Rahman" } ],
+      "tags": ["release", "php", "observability", "mcp"]
+    },
+    {
       "id": "https://alo.asif.dev/#release-2.0.0",
       "url": "https://alo.asif.dev/",
       "title": "Alo 2.0.0 — protected diagnostics, modern dashboard, read-only MCP",
@@ -608,9 +617,17 @@ cat > "$PUB/feed.xml" <<'ATOM'
   <link href="https://alo.asif.dev/feed.xml" rel="self" type="application/atom+xml"/>
   <link href="https://alo.asif.dev/" rel="alternate" type="text/html"/>
   <id>https://alo.asif.dev/</id>
-  <updated>2026-09-09T03:35:36+04:00</updated>
+  <updated>2026-09-09T12:56:18+04:00</updated>
   <author><name>M Asif Rahman</name><uri>https://ar.bd/</uri></author>
   <rights>GPL-3.0-only</rights>
+  <entry>
+    <title>Alo 2.1.0 — deep telemetry, charts, and collapsible sections</title>
+    <link href="https://alo.asif.dev/" rel="alternate" type="text/html"/>
+    <id>https://alo.asif.dev/#release-2.1.0</id>
+    <updated>2026-09-09T12:56:18+04:00</updated>
+    <published>2026-09-09T12:56:18+04:00</published>
+    <summary>Gauges, a CPU-time breakdown with steal and I/O wait, memory composition and per-core bars, then collapsible sections holding pressure stall information, paging and OOM counters, every filesystem and disk device, TCP and UDP counters, cgroup throttling and OOM events, kernel and sysctl values, and deeper OPcache with JIT.</summary>
+  </entry>
   <entry>
     <title>Alo 2.0.0 — protected diagnostics, modern dashboard, read-only MCP</title>
     <link href="https://alo.asif.dev/" rel="alternate" type="text/html"/>
@@ -654,7 +671,7 @@ cat > "$PUB/openapi.json" <<'OPENAPI'
   "openapi": "3.1.0",
   "info": {
     "title": "Alo server probe API",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "summary": "Read-only snapshot of the server running this Alo instance.",
     "description": "Alo exposes a private, read-only view of the host it runs on. Every route requires HTTPS and a generated 256-bit token, sent as HTTP Basic (username 'alo') or Bearer. Nothing here can change server state.",
     "license": { "name": "GPL-3.0-only", "url": "https://www.gnu.org/licenses/gpl-3.0.html" },
@@ -802,7 +819,7 @@ cat > "$PUB/.well-known/mcp/server-card.json" <<'CARD'
   "schemaVersion": "2025-06-18",
   "serverInfo": {
     "name": "alo",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "title": "Alo server probe",
     "description": "A read-only snapshot of the server running this Alo instance: CPU, memory, disk, container quotas, PHP, OPcache and network counters, plus capacity and configuration observations."
   },
