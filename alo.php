@@ -33,6 +33,12 @@ function percent(int|float|null $used, int|float|null $total): ?float
         ? null : round(max(0, min(100, $used / $total * 100)), 1);
 }
 
+/** Unclamped ratio, for values that are meaningful above 100% such as overcommit. */
+function ratio(int|float|null $used, int|float|null $total): ?float
+{
+    return $used === null || $total === null || $total <= 0 ? null : round($used / $total * 100, 1);
+}
+
 function bytes(int|float|null $value): string
 {
     if ($value === null) {
@@ -467,7 +473,7 @@ function collect(array $settingOverrides = []): array
         'slab_bytes' => $pick('Slab'), 'slab_reclaimable_bytes' => $pick('SReclaimable'),
         'page_tables_bytes' => $pick('PageTables'), 'committed_bytes' => $pick('Committed_AS'),
         'commit_limit_bytes' => $pick('CommitLimit'),
-        'commit_used_percent' => percent($pick('Committed_AS'), $pick('CommitLimit')),
+        'commit_used_percent' => ratio($pick('Committed_AS'), $pick('CommitLimit')),
         'active_bytes' => $pick('Active'), 'inactive_bytes' => $pick('Inactive'),
         'hugepages_total' => $pick('HugePages_Total'), 'hugepages_free' => $pick('HugePages_Free')];
     $diskTotal = function_exists('disk_total_space') ? @disk_total_space(__DIR__) : false;
@@ -682,8 +688,8 @@ function insights(array $report): array
     }
     $commit = $report['memory']['detail']['commit_used_percent'] ?? null;
     if ($commit !== null && $commit >= 95) {
-        $add('warning', 'Committed memory exceeds the overcommit limit',
-            "$commit% of CommitLimit is committed. New allocations may start failing depending on the overcommit policy.");
+        $add($commit >= 100 ? 'warning' : 'info', 'Committed memory is at the overcommit limit',
+            "$commit% of CommitLimit is committed. Above 100% the kernel has promised more memory than the limit allows; whether allocations fail depends on vm.overcommit_memory.");
     }
     $temperature = $report['kernel']['cpu_temperature_c'] ?? null;
     if ($temperature !== null && $temperature >= 80) {
