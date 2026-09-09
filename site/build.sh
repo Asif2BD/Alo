@@ -120,6 +120,7 @@ footer{border-top:1px solid var(--line);margin-top:3.5rem;padding:1.75rem 0 2.5r
         <li><a href="#start">Quick start</a></li>
         <li><a href="#agents">For AI agents</a></li>
         <li><a href="#security">Security</a></li>
+        <li><a href="#fleet">Fleet</a></li>
         <li><a href="#pricing">Pricing</a></li>
         <li><a href="#faq">FAQ</a></li>
         <li><a href="https://github.com/Asif2BD/Alo">GitHub</a></li>
@@ -149,13 +150,17 @@ footer{border-top:1px solid var(--line);margin-top:3.5rem;padding:1.75rem 0 2.5r
 
   <section id="shows">
     <h2>What it shows</h2>
+    <p>The dashboard opens with radial gauges, a CPU-time breakdown, a memory composition bar and per-core utilisation. Everything else stacks into collapsible sections, so the page stays readable while carrying several hundred metrics.</p>
     <ul class="grid">
-      <li><b>Resources</b><span>Sampled CPU busy time, visible cores, load average, uptime, available-based RAM usage, swap and disk capacity.</span></li>
-      <li><b>Containers</b><span>Separately labelled cgroup v2 root memory and CPU quotas, so host and container scopes are never silently mixed.</span></li>
-      <li><b>PHP</b><span>Version and branch lifecycle, selected configuration, extensions, PDO client drivers and worker memory.</span></li>
-      <li><b>OPcache</b><span>Memory, wasted memory, hit rate and cached script count — without exposing cached file paths.</span></li>
-      <li><b>Network</b><span>Cumulative interface bytes, errors and drops. Counters, not an artificial speed test.</span></li>
-      <li><b>Observations</b><span>Capacity thresholds and risky PHP settings, each with a practical next step.</span></li>
+      <li><b>Processor</b><span>Per-core busy percentages and where CPU time went — user, nice, system, I/O wait, <b>steal</b>, IRQ, idle — plus load, runnable and blocked processes, context switches and interrupts.</span></li>
+      <li><b>Memory</b><span>The full composition: used, available, cache, buffers, anonymous, mapped, dirty, writeback, slab, page tables, commit limit and swap.</span></li>
+      <li><b>Pressure</b><span>Pressure Stall Information for CPU, memory and I/O over 10, 60 and 300 seconds — contention that a utilisation percentage hides entirely.</span></li>
+      <li><b>Storage</b><span>Every mounted filesystem with its own usage, then cumulative per-device reads, writes, bytes and busy time.</span></li>
+      <li><b>Network and sockets</b><span>Per-interface counters with link speed, MTU and state, plus TCP and UDP counters, established connections and the retransmit rate.</span></li>
+      <li><b>Containers</b><span>Cgroup v2 memory with its soft limit and peak, <b>OOM kills</b>, <b>CPU throttled periods</b>, and process counts against the limit.</span></li>
+      <li><b>Kernel</b><span>Distribution, kernel version, file-descriptor usage, CPU temperature, scaling governor, entropy and selected sysctls.</span></li>
+      <li><b>PHP and OPcache</b><span>Version and branch lifecycle, configuration, extensions with versions, PDO drivers; OPcache memory, hit rate, restarts, interned strings and JIT.</span></li>
+      <li><b>Observations</b><span>Container throttling, cgroup OOM kills, sustained pressure, hypervisor steal, descriptor exhaustion, TCP retransmits and risky PHP settings — each with a next step.</span></li>
     </ul>
     <figure>
       <img src="/img/dashboard.png" alt="The Alo dashboard showing resource cards for CPU, memory and disk alongside a list of configuration observations" width="1600" height="1000" loading="lazy" decoding="async">
@@ -230,6 +235,21 @@ footer{border-top:1px solid var(--line);margin-top:3.5rem;padding:1.75rem 0 2.5r
     <h2>What it costs</h2>
     <p>Nothing. Alo is free software under <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0-only</a>: one perpetual, no-cost licence covering the whole tool, on as many servers as you like.</p>
     <p>There is no paid tier, no subscription, no hosted plan, no licence key and no usage limit. You run it on your own server, and it never contacts a vendor — including this one.</p>
+  </section>
+
+  <section id="fleet">
+    <h2>Telemetry for a fleet</h2>
+    <p>Alo is a scrape target, not an agent. It makes no outbound request of any kind, so a server manager pulls from it on its own schedule and Alo keeps no state between calls.</p>
+    <pre><code>curl -H "Authorization: Bearer $TOKEN" \
+  "https://host/alo.php?format=metrics&amp;sample=0"</code></pre>
+    <p><code>?format=metrics</code> returns OpenMetrics 1.0. Cumulative series are typed as counters and exported raw — the scraper differentiates two scrapes into a rate, which is why Alo needs no history and no database. Percentages are exported as 0–1 ratios, and a reading Alo could not take is <em>omitted entirely</em> rather than exported as zero, because a zero averages into a dashboard as though it had been measured.</p>
+    <ul>
+      <li><code>?sample=0</code> skips the CPU sampling sleep, which is most of a request's cost — 103 ms down to under 4 ms. Busy percentages come back absent rather than invented.</li>
+      <li><code>?fields=memory,disk</code> trims a JSON snapshot to the families you asked for.</li>
+      <li><code>ALO_INSTANCE=web-01</code> labels the instance for a fleet. Alo never derives an identity from a hostname or address.</li>
+      <li>Every response carries <code>Server-Timing</code> reporting what collection cost.</li>
+    </ul>
+    <p>Poll no more often than every 30 seconds, and prefer <code>sample=0</code> below 60.</p>
   </section>
 
   <section id="docs">
@@ -368,16 +388,37 @@ snapshot to humans and to AI agents.
 
 ## What it shows
 
-- **Resources** — sampled CPU busy time, visible cores, load average, uptime,
-  available-based RAM usage, swap and disk capacity.
-- **Containers** — cgroup v2 root memory and CPU quotas, labelled separately from
-  host-visible figures.
-- **PHP** — version and branch lifecycle, selected configuration, extensions,
-  PDO client drivers and worker memory.
-- **OPcache** — memory, wasted memory, hit rate and cached script count, without
-  cached file paths.
-- **Network** — cumulative interface bytes, errors and drops. Not a speed test.
-- **Observations** — capacity thresholds and risky PHP settings with next steps.
+Gauges, a CPU-time breakdown, a memory composition bar and per-core utilisation at
+the top; everything else in collapsible sections carrying several hundred metrics.
+
+- **Processor** — per-core busy, and where CPU time went including **steal** and
+  I/O wait, plus load, scheduler counters and boot time.
+- **Memory** — the full composition: cache, buffers, anonymous, dirty, slab,
+  page tables, commit limit, swap.
+- **Pressure** — PSI for CPU, memory and I/O over 10/60/300s: contention that a
+  utilisation percentage hides.
+- **Storage** — every mounted filesystem, plus per-device I/O counters.
+- **Network and sockets** — interface counters with link speed and state, TCP and
+  UDP counters, retransmit rate.
+- **Containers** — cgroup v2 memory, **OOM kills**, **CPU throttling**, process counts.
+- **Kernel** — distribution, kernel, descriptor usage, temperature, sysctls.
+- **PHP and OPcache** — lifecycle, configuration, extensions, JIT, restarts.
+- **Observations** — throttling, OOM kills, sustained pressure, steal, descriptor
+  exhaustion, retransmits and risky PHP settings, each with a next step.
+
+## Telemetry for a fleet
+
+Alo is a scrape target, not an agent, and makes no outbound request of any kind.
+
+```
+GET /alo.php?format=metrics&sample=0
+Authorization: Bearer <token>
+```
+
+OpenMetrics 1.0. Counters are exported raw so the scraper computes rates and Alo
+keeps no history. Percentages are 0-1 ratios. Unavailable readings are omitted,
+never exported as zero. `sample=0` skips the CPU sampling sleep (103ms to under
+4ms); `fields=` trims JSON; `ALO_INSTANCE` labels the instance.
 
 ## Quick start
 
