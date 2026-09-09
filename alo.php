@@ -438,14 +438,18 @@ function sockstatInfo(?string $raw): array
     return $out;
 }
 
-function collect(array $settingOverrides = []): array
+function collect(array $settingOverrides = [], int $sampleMs = 100): array
 {
     $started = hrtime(true);
+    // Busy percentages need two samples separated in time, and that sleep is
+    // almost the entire cost of a request. A fleet poller that only wants
+    // counters can pass sample=0 and get everything else for a tenth of the price.
+    $sampleMs = max(0, min(1000, $sampleMs));
     $statBefore = readLocal('/proc/stat');
     $first = cpuTicks($statBefore);
     $statAfter = null;
-    if ($first !== null && function_exists('usleep')) {
-        usleep(100000);
+    if ($sampleMs > 0 && $first !== null && function_exists('usleep')) {
+        usleep($sampleMs * 1000);
         $statAfter = readLocal('/proc/stat');
         $cpu = cpuUsage($first, cpuTicks($statAfter));
     } else {
@@ -542,7 +546,9 @@ function collect(array $settingOverrides = []): array
     $snmp = snmpInfo(readLocal('/proc/net/snmp'));
     $sockets = sockstatInfo(readLocal('/proc/net/sockstat'));
     $vmstat = procPairs(readLocal('/proc/vmstat'));
+    $instance = trim((string) getenv('ALO_INSTANCE'));
     $report = ['schema_version' => 1, 'alo_version' => VERSION, 'collected_at' => gmdate('c'),
+        'instance' => $instance === '' ? null : substr(preg_replace('/[^A-Za-z0-9_.:\-]/', '', $instance), 0, 64),
         'scope' => 'Snapshot from this PHP runtime. Linux host-visible metrics may exceed container limits. No historical monitoring.',
         'web_server' => webServer($_SERVER, PHP_SAPI),
         'runtime' => ['php_version' => PHP_VERSION, 'sapi' => PHP_SAPI, 'os_family' => PHP_OS_FAMILY,
@@ -557,7 +563,7 @@ function collect(array $settingOverrides = []): array
             'physical_packages' => $physical ?: null,
             'mhz' => isset($mhz[1]) ? (float) $mhz[1] : null, 'cache' => $cache[1] ?? null,
             'busy_percent' => $cpu,
-            'sample_ms' => $cpu === null ? null : 100, 'load_1m' => $load === false ? null : $load[0],
+            'sample_ms' => $cpu === null ? null : $sampleMs, 'load_1m' => $load === false ? null : $load[0],
             'load_5m' => $load === false ? null : $load[1], 'load_15m' => $load === false ? null : $load[2],
             'load_per_core' => $load === false || $cores === null || $cores <= 0 ? null : round($load[0] / $cores, 2),
             'breakdown' => cpuBreakdown($statBefore, $statAfter),
@@ -597,6 +603,185 @@ function collect(array $settingOverrides = []): array
     $report['insights'] = insights($report);
     $report['collection_ms'] = round((hrtime(true) - $started) / 1000000, 1);
     return $report;
+}
+
+/**
+ * OpenMetrics exposition of a snapshot.
+ *
+ * This is the shape a fleet manager wants. Counters stay counters, so the
+ * scraper differentiates two scrapes into a rate itself and Alo keeps no
+ * history and no state. Values that could not be read are omitted entirely
+ * rather than exported as zero, because a zero would be a lie a dashboard
+ * would happily average.
+ */
+function metricsText(array $data): string
+{
+    $out = [];
+    $base = ($data['instance'] ?? null) === null ? [] : ['instance' => $data['instance']];
+    $number = static function (int|float $value): string {
+        return (float) $value === floor((float) $value) && abs((float) $value) < 1e15
+            ? number_format((float) $value, 0, '.', '')
+            : rtrim(rtrim(sprintf('%.6f', $value), '0'), '.');
+    };
+    $emit = static function (string $name, string $type, string $help, array $samples) use (&$out, $base, $number): void {
+        $lines = [];
+        foreach ($samples as [$labels, $value]) {
+            if ($value === null || !is_numeric($value)) {
+                continue;
+            }
+            $pairs = [];
+            foreach ($base + $labels as $key => $raw) {
+                $pairs[] = $key . '="' . str_replace(['\\', '"', "\n"], ['\\\\', '\\"', ' '], (string) $raw) . '"';
+            }
+            $lines[] = $name . ($pairs === [] ? '' : '{' . implode(',', $pairs) . '}') . ' ' . $number($value);
+        }
+        if ($lines === []) {
+            return;
+        }
+        $out[] = '# HELP ' . $name . ' ' . $help;
+        $out[] = '# TYPE ' . $name . ' ' . $type;
+        array_push($out, ...$lines);
+    };
+    $ratio = static fn (int|float|null $percent): ?float => $percent === null ? null : round($percent / 100, 6);
+
+    $emit('alo_up', 'gauge', 'Always 1 when the probe answered.', [[[], 1]]);
+    $emit('alo_build_info', 'gauge', 'Alo and PHP versions as labels.',
+        [[['version' => $data['alo_version'], 'php' => $data['runtime']['php_version'] ?? '', 'schema' => (string) $data['schema_version']], 1]]);
+    $emit('alo_collection_seconds', 'gauge', 'Wall-clock cost of building this snapshot.',
+        [[[], ($data['collection_ms'] ?? null) === null ? null : $data['collection_ms'] / 1000]]);
+
+    $cpu = $data['cpu'];
+    $emit('alo_cpu_busy_ratio', 'gauge', 'Host-visible CPU busy over the sampling window, 0-1.', [[[], $ratio($cpu['busy_percent'])]]);
+    $emit('alo_cpu_logical_cores', 'gauge', 'Logical cores visible to this runtime.', [[[], $cpu['logical_cores']]]);
+    $modes = [];
+    foreach (['user', 'nice', 'system', 'idle', 'iowait', 'irq', 'softirq', 'steal'] as $mode) {
+        $modes[] = [['mode' => $mode], $ratio($cpu['breakdown'][$mode . '_percent'] ?? null)];
+    }
+    $emit('alo_cpu_time_ratio', 'gauge', 'Share of the sampling window per CPU mode, 0-1.', $modes);
+    $emit('alo_cpu_core_busy_ratio', 'gauge', 'Busy share per logical core, 0-1.',
+        array_map(static fn (array $core): array => [['core' => (string) $core['core']], $ratio($core['busy_percent'])], $cpu['per_core']));
+    $emit('alo_load_average', 'gauge', 'Runnable and uninterruptible tasks, not a percentage.',
+        [[['period' => '1m'], $cpu['load_1m']], [['period' => '5m'], $cpu['load_5m']], [['period' => '15m'], $cpu['load_15m']]]);
+    $scheduler = $cpu['scheduler'];
+    $emit('alo_context_switches_total', 'counter', 'Context switches since boot.', [[[], $scheduler['context_switches']]]);
+    $emit('alo_interrupts_total', 'counter', 'Interrupts since boot.', [[[], $scheduler['interrupts']]]);
+    $emit('alo_forks_total', 'counter', 'Processes forked since boot.', [[[], $scheduler['forks_since_boot']]]);
+    $emit('alo_procs', 'gauge', 'Processes by scheduler state.',
+        [[['state' => 'running'], $scheduler['procs_running']], [['state' => 'blocked'], $scheduler['procs_blocked']]]);
+    $emit('alo_uptime_seconds', 'gauge', 'Host uptime.', [[[], $data['uptime_seconds']]]);
+
+    $memory = $data['memory'];
+    $detail = $memory['detail'];
+    $emit('alo_memory_bytes', 'gauge', 'Host memory by category.', [
+        [['type' => 'total'], $memory['total_bytes']], [['type' => 'used'], $memory['used_bytes']],
+        [['type' => 'available'], $memory['available_bytes']], [['type' => 'free'], $detail['free_bytes']],
+        [['type' => 'cached'], $detail['cached_bytes']], [['type' => 'buffers'], $detail['buffers_bytes']],
+        [['type' => 'shared'], $detail['shmem_bytes']], [['type' => 'anonymous'], $detail['anon_bytes']],
+        [['type' => 'mapped'], $detail['mapped_bytes']], [['type' => 'active'], $detail['active_bytes']],
+        [['type' => 'inactive'], $detail['inactive_bytes']], [['type' => 'dirty'], $detail['dirty_bytes']],
+        [['type' => 'writeback'], $detail['writeback_bytes']], [['type' => 'slab'], $detail['slab_bytes']],
+        [['type' => 'page_tables'], $detail['page_tables_bytes']],
+        [['type' => 'committed'], $detail['committed_bytes']], [['type' => 'commit_limit'], $detail['commit_limit_bytes']],
+    ]);
+    $emit('alo_swap_bytes', 'gauge', 'Swap by category.',
+        [[['type' => 'total'], $memory['swap_total_bytes']], [['type' => 'used'], $memory['swap_used_bytes']]]);
+
+    $pressureSamples = [];
+    foreach (['cpu', 'memory', 'io'] as $resource) {
+        foreach (['some', 'full'] as $kind) {
+            foreach ([10, 60, 300] as $window) {
+                $pressureSamples[] = [['resource' => $resource, 'kind' => $kind, 'window' => (string) $window],
+                    $ratio($data['pressure'][$resource][$kind . '_avg' . $window] ?? null)];
+            }
+        }
+    }
+    $emit('alo_pressure_stall_ratio', 'gauge', 'PSI: share of time work was delayed waiting on a resource, 0-1.', $pressureSamples);
+    $paging = $data['paging'];
+    $emit('alo_paging_total', 'counter', 'Virtual memory events since boot.', [
+        [['type' => 'fault'], $paging['page_faults']], [['type' => 'major_fault'], $paging['major_page_faults']],
+        [['type' => 'swap_in'], $paging['swap_in']], [['type' => 'swap_out'], $paging['swap_out']],
+        [['type' => 'oom_kill'], $paging['oom_kills']],
+    ]);
+
+    $filesystems = [];
+    foreach ($data['disk']['mounts'] as $mount) {
+        foreach (['total' => 'total_bytes', 'used' => 'used_bytes', 'free' => 'free_bytes'] as $type => $key) {
+            $filesystems[] = [['mount' => $mount['mount'], 'fstype' => $mount['filesystem'], 'type' => $type], $mount[$key]];
+        }
+    }
+    $emit('alo_filesystem_bytes', 'gauge', 'Space per mounted filesystem.', $filesystems);
+    $ioBytes = [];
+    $ioOps = [];
+    foreach ($data['disk']['devices'] as $device) {
+        $ioBytes[] = [['device' => $device['device'], 'op' => 'read'], $device['read_bytes']];
+        $ioBytes[] = [['device' => $device['device'], 'op' => 'write'], $device['written_bytes']];
+        $ioOps[] = [['device' => $device['device'], 'op' => 'read'], $device['reads']];
+        $ioOps[] = [['device' => $device['device'], 'op' => 'write'], $device['writes']];
+    }
+    $emit('alo_disk_bytes_total', 'counter', 'Bytes read and written per device since boot.', $ioBytes);
+    $emit('alo_disk_operations_total', 'counter', 'Read and write operations per device since boot.', $ioOps);
+
+    $netBytes = [];
+    $netErrors = [];
+    $netDrops = [];
+    foreach ($data['network'] as $interface) {
+        $name = $interface['interface'];
+        $netBytes[] = [['interface' => $name, 'direction' => 'rx'], $interface['received_bytes']];
+        $netBytes[] = [['interface' => $name, 'direction' => 'tx'], $interface['sent_bytes']];
+        $netErrors[] = [['interface' => $name, 'direction' => 'rx'], $interface['receive_errors']];
+        $netErrors[] = [['interface' => $name, 'direction' => 'tx'], $interface['transmit_errors']];
+        $netDrops[] = [['interface' => $name, 'direction' => 'rx'], $interface['receive_drops']];
+        $netDrops[] = [['interface' => $name, 'direction' => 'tx'], $interface['transmit_drops']];
+    }
+    $emit('alo_network_bytes_total', 'counter', 'Interface bytes since boot.', $netBytes);
+    $emit('alo_network_errors_total', 'counter', 'Interface errors since boot.', $netErrors);
+    $emit('alo_network_drops_total', 'counter', 'Interface drops since boot.', $netDrops);
+
+    $sockets = $data['sockets'];
+    $emit('alo_tcp_connections', 'gauge', 'TCP sockets by state.',
+        [[['state' => 'established'], $sockets['tcp_established']], [['state' => 'time_wait'], $sockets['tcp_time_wait']],
+         [['state' => 'orphan'], $sockets['tcp_orphan']], [['state' => 'in_use'], $sockets['tcp_in_use']]]);
+    $emit('alo_tcp_segments_total', 'counter', 'TCP segments since boot.',
+        [[['direction' => 'in'], $sockets['tcp_segments_in']], [['direction' => 'out'], $sockets['tcp_segments_out']],
+         [['direction' => 'retransmitted'], $sockets['tcp_retransmitted_segments']]]);
+
+    $container = $data['container'];
+    $emit('alo_cgroup_memory_bytes', 'gauge', 'Cgroup v2 memory.',
+        [[['type' => 'current'], $container['memory_used_bytes']], [['type' => 'limit'], $container['memory_limit_bytes']],
+         [['type' => 'high'], $container['memory_high_bytes']], [['type' => 'peak'], $container['memory_peak_bytes']]]);
+    $emit('alo_cgroup_memory_events_total', 'counter', 'Cgroup memory events since boot.',
+        [[['event' => 'high'], $container['memory_events']['high']], [['event' => 'max'], $container['memory_events']['max']],
+         [['event' => 'oom'], $container['memory_events']['oom']], [['event' => 'oom_kill'], $container['memory_events']['oom_kill']]]);
+    $emit('alo_cgroup_cpu_periods_total', 'counter', 'Cgroup CPU scheduling periods since boot.',
+        [[['result' => 'elapsed'], $container['cpu_periods']], [['result' => 'throttled'], $container['cpu_throttled_periods']]]);
+    $emit('alo_cgroup_cpu_quota_cores', 'gauge', 'Cgroup CPU quota in cores.', [[[], $container['cpu_quota_cores']]]);
+    $emit('alo_cgroup_pids', 'gauge', 'Processes in the cgroup.',
+        [[['type' => 'current'], $container['pids_current']], [['type' => 'max'], $container['pids_max']]]);
+
+    $kernel = $data['kernel'];
+    $emit('alo_open_files', 'gauge', 'Allocated file descriptors and the kernel ceiling.',
+        [[['type' => 'allocated'], $kernel['open_files']], [['type' => 'max'], $kernel['open_files_max']]]);
+    $emit('alo_cpu_temperature_celsius', 'gauge', 'First thermal zone reading.', [[[], $kernel['cpu_temperature_c']]]);
+
+    $opcache = $data['opcache'];
+    $emit('alo_opcache_memory_bytes', 'gauge', 'OPcache shared memory.',
+        [[['type' => 'used'], $opcache['used_bytes']], [['type' => 'free'], $opcache['free_bytes']],
+         [['type' => 'wasted'], $opcache['wasted_bytes']]]);
+    $emit('alo_opcache_hit_ratio', 'gauge', 'OPcache hit rate, 0-1.', [[[], $ratio($opcache['hit_rate_percent'])]]);
+    $emit('alo_opcache_scripts', 'gauge', 'Scripts currently cached.', [[[], $opcache['cached_scripts']]]);
+    $emit('alo_opcache_restarts_total', 'counter', 'OPcache restarts since start.',
+        [[['reason' => 'oom'], $opcache['oom_restarts']], [['reason' => 'hash'], $opcache['hash_restarts']],
+         [['reason' => 'manual'], $opcache['manual_restarts']]]);
+
+    $bySeverity = ['critical' => 0, 'warning' => 0, 'info' => 0];
+    foreach ($data['insights'] as $item) {
+        $bySeverity[$item['severity']] = ($bySeverity[$item['severity']] ?? 0) + 1;
+    }
+    $emit('alo_insights', 'gauge', 'Observations Alo raised in this snapshot, by severity.',
+        array_map(static fn (string $level): array => [['severity' => $level], $bySeverity[$level]], array_keys($bySeverity)));
+
+    $out[] = '# EOF';
+    return implode("\n", $out) . "\n";
 }
 
 function insights(array $report): array
@@ -876,7 +1061,18 @@ function manifest(): array
 {
     return ['name' => 'Alo', 'version' => VERSION, 'schema_version' => 1,
         'description' => 'Authenticated, read-only server snapshots. No remediation or command execution.',
-        'endpoints' => ['snapshot' => '?format=json', 'manifest' => '?format=manifest', 'mcp' => '?format=mcp'],
+        'endpoints' => ['snapshot' => '?format=json', 'manifest' => '?format=manifest', 'mcp' => '?format=mcp',
+            'metrics' => '?format=metrics', 'dashboard' => '?format=html'],
+        'parameters' => [
+            'sample' => 'Milliseconds to sample CPU for, 0-1000, default 100. Sampling is almost the entire cost of a request; sample=0 skips it and reports busy percentages as null rather than zero. Use it for frequent polling that only needs counters.',
+            'fields' => 'Comma-separated top-level families to return from ?format=json. Identity fields are always included.',
+        ],
+        'scraping' => ['format' => 'OpenMetrics 1.0 text at ?format=metrics, authenticated like every other route.',
+            'counters' => 'Cumulative series are typed as counters and exported raw. Differentiate two scrapes to get a rate; Alo stores no history and computes no rates for you.',
+            'gauges' => 'Percentages are exported as 0-1 ratios with a _ratio suffix, per OpenMetrics convention.',
+            'missing' => 'A reading Alo could not take is omitted from the exposition entirely. It is never exported as zero, because a zero averages into a dashboard as if it were measured.',
+            'instance' => 'Set ALO_INSTANCE in the server environment to label a fleet. Alo never derives an identity from the hostname or address.',
+            'suggested_interval' => 'No more often than every 30 seconds, and prefer sample=0 below 60 seconds.'],
         'authentication' => 'HTTPS plus Authorization: Bearer <generated token>; Basic username alo also supported.',
         'mcp' => ['transport' => 'Streamable HTTP, stateless JSON responses', 'protocol_versions' => MCP_VERSIONS,
             'tools' => ['alo_snapshot', 'alo_insights', 'alo_capabilities'], 'oauth' => false],
@@ -1615,8 +1811,25 @@ function main(): void
         header('WWW-Authenticate: Basic realm="Alo", charset="UTF-8"');
         fail(401, 'Authentication required.');
     }
-    if (array_diff(array_keys($_GET), ['format']) || (isset($_GET['format']) && !in_array($_GET['format'], ['html', 'json', 'manifest', 'mcp'], true))) {
+    if (array_diff(array_keys($_GET), ['format', 'sample', 'fields'])
+        || (isset($_GET['format']) && !in_array($_GET['format'], ['html', 'json', 'manifest', 'mcp', 'metrics'], true))) {
         fail(400, 'Unsupported format.');
+    }
+    // A fleet poller that only wants counters can skip the CPU sampling sleep,
+    // which is almost the whole cost of a request.
+    $sampleMs = 100;
+    if (isset($_GET['sample'])) {
+        if (preg_match('/^[0-9]{1,4}$/D', (string) $_GET['sample']) !== 1) {
+            fail(400, 'sample must be a whole number of milliseconds between 0 and 1000.');
+        }
+        $sampleMs = (int) $_GET['sample'];
+    }
+    $fields = [];
+    if (isset($_GET['fields'])) {
+        if (preg_match('/^[a-z_]+(,[a-z_]+)*$/D', (string) $_GET['fields']) !== 1) {
+            fail(400, 'fields must be a comma-separated list of top-level family names.');
+        }
+        $fields = explode(',', (string) $_GET['fields']);
     }
     if (($_GET['format'] ?? '') === 'mcp') {
         handleMcp(['display_errors' => $originalDisplayErrors]);
@@ -1632,8 +1845,18 @@ function main(): void
         return;
     }
     try {
-        $data = collect(['display_errors' => $originalDisplayErrors]);
+        $data = collect(['display_errors' => $originalDisplayErrors], $sampleMs);
+        header('Server-Timing: collect;dur=' . $data['collection_ms']);
+        if (($_GET['format'] ?? '') === 'metrics') {
+            header('Content-Type: application/openmetrics-text; version=1.0.0; charset=utf-8');
+            echo metricsText($data);
+            return;
+        }
         if (($_GET['format'] ?? '') === 'json') {
+            if ($fields !== []) {
+                $always = ['schema_version', 'alo_version', 'collected_at', 'instance', 'collection_ms'];
+                $data = array_intersect_key($data, array_flip(array_merge($always, $fields)));
+            }
             header('Content-Type: application/json; charset=utf-8');
             echo json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR) . "\n";
             return;

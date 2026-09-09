@@ -163,4 +163,40 @@ try:
 finally:
     shutil.rmtree(workdir, ignore_errors=True)
 
+# --- scrape surface for a fleet manager -------------------------------------
+with server({'ALO_TOKEN_HASH': HASH, 'ALO_ALLOW_LOCAL_HTTP': '1', 'ALO_INSTANCE': 'web-01'}) as port:
+    status, headers, body = request(port, '/alo.php?format=metrics', AUTH)
+    check(status == 200, 'Metrics endpoint answers')
+    check('openmetrics-text' in headers.get('content-type', ''), 'OpenMetrics content type')
+    check(body.rstrip().endswith('# EOF'), 'OpenMetrics EOF terminator')
+    check('alo_up{instance="web-01"} 1' in body, 'alo_up is exported with the instance label')
+    check('# TYPE alo_build_info gauge' in body, 'Metrics carry TYPE metadata')
+    if 'alo_network_bytes_total' in body:   # absent on hosts without /proc/net/dev
+        check('# TYPE alo_network_bytes_total counter' in body, 'Cumulative series are typed as counters')
+    check('alo_up{instance="web-01"} 0' not in body, 'Unavailable readings are omitted, never exported as zero')
+    check('instance="web-01"' in body, 'Operator instance label is applied')
+    check('server-timing' in headers, 'Server-Timing reports collection cost')
+    check(request(port, '/alo.php?format=metrics')[0] == 401, 'Metrics still requires a token')
+
+    slow = json.loads(request(port, '/alo.php?format=json', AUTH)[2])
+    fast = json.loads(request(port, '/alo.php?format=json&sample=0', AUTH)[2])
+    check(fast['cpu']['busy_percent'] is None, 'sample=0 reports null rather than a fabricated zero')
+    check(fast['cpu']['sample_ms'] is None, 'sample=0 does not claim a sampling window')
+    if slow['cpu']['busy_percent'] is not None:   # sampling only happens where /proc/stat exists
+        check(slow['cpu']['sample_ms'] == 100, 'Default sampling window is reported')
+        check(fast['collection_ms'] < slow['collection_ms'], 'sample=0 is measurably cheaper')
+    check(fast['memory']['total_bytes'] == slow['memory']['total_bytes'],
+          'sample=0 still returns everything that needs no sampling')
+    check(fast['instance'] == 'web-01', 'Instance label is in the snapshot')
+
+    picked = json.loads(request(port, '/alo.php?format=json&fields=memory,disk', AUTH)[2])
+    check('memory' in picked and 'disk' in picked, 'Field selection keeps what was asked for')
+    check('runtime' not in picked and 'network' not in picked, 'Field selection drops the rest')
+    check('collected_at' in picked and 'schema_version' in picked, 'Identity fields always survive selection')
+
+    check(request(port, '/alo.php?sample=abc', AUTH)[0] == 400, 'Bad sample value rejected')
+    check(request(port, '/alo.php?sample=99999', AUTH)[0] == 400, 'Out-of-range sample rejected')
+    check(request(port, '/alo.php?fields=../etc', AUTH)[0] == 400, 'Bad fields value rejected')
+    check(request(port, '/alo.php?unknown=1', AUTH)[0] == 400, 'Unknown parameters still rejected')
+
 print(f'{checks} HTTP checks passed.')
