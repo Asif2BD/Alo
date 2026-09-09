@@ -41,6 +41,22 @@ cp "$ROOT/docs/hosting.md" "$PUB/docs/hosting.md"
 cp "$ROOT/docs/roadmap.md" "$PUB/docs/roadmap.md"
 cp "$ROOT/docs/screenshots/desktop.jpg" "$PUB/img/dashboard.jpg"
 cp "$ROOT/docs/screenshots/desktop-dark.jpg" "$PUB/img/pulse.jpg"
+cp "$ROOT/docs/screenshots/launch.jpg" "$PUB/img/launch.jpg"
+cp "$ROOT/docs/screenshots/mobile.jpg" "$PUB/img/mobile.jpg"
+# The README lives under /docs in this build, so repository-relative image and
+# document URLs need public equivalents. Leave the source README GitHub-friendly.
+sed -i \
+  -e 's|docs/screenshots/desktop-dark.jpg|/img/pulse.jpg|g' \
+  -e 's|docs/screenshots/desktop.jpg|/img/dashboard.jpg|g' \
+  -e 's|docs/screenshots/launch.jpg|/img/launch.jpg|g' \
+  -e 's|docs/screenshots/mobile.jpg|/img/mobile.jpg|g' \
+  -e 's|](docs/agents.md)|](/docs/agents.md)|g' \
+  -e 's|](docs/hosting.md)|](/docs/hosting.md)|g' \
+  -e 's|](SECURITY.md)|](/docs/security.md)|g' \
+  -e 's|](CONTRIBUTING.md)|](/docs/contributing.md)|g' \
+  -e 's|](gpl-3.0.txt)|](https://github.com/Asif2BD/Alo/blob/master/gpl-3.0.txt)|g' \
+  -e 's|](tests/)|](https://github.com/Asif2BD/Alo/tree/master/tests)|g' \
+  "$PUB/docs/readme.md"
 cp "$ROOT/CONTRIBUTING.md" "$PUB/docs/contributing.md"
 mkdir -p "$PUB/downloads"
 PHP_BIN="${PHP_BINARY:-php}"
