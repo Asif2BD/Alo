@@ -7,7 +7,7 @@
 
 [![CI](https://github.com/Asif2BD/Alo/actions/workflows/ci.yml/badge.svg)](https://github.com/Asif2BD/Alo/actions/workflows/ci.yml)
 [![PHP](https://img.shields.io/badge/PHP-8.3%20%7C%208.4%20%7C%208.5-777bb4)](https://www.php.net/supported-versions.php)
-[![tests](https://img.shields.io/badge/tests-169%20passing-2ea44f)](tests/)
+[![tests](https://img.shields.io/badge/tests-171%20passing-2ea44f)](tests/)
 [![dependencies](https://img.shields.io/badge/dependencies-none-2ea44f)](#)
 [![deploy](https://img.shields.io/badge/deploy-one%20file-orange)](#install-in-one-line)
 [![license](https://img.shields.io/badge/license-GPL--3.0--only-blue)](gpl-3.0.txt)
@@ -186,10 +186,10 @@ Public `phpinfo`, JSONP/realtime routes, function tests, database connection tes
 
 ## Tests
 
-**169 automated checks** run on every push against **PHP 8.3, 8.4 and 8.5**:
+**171 automated checks** run on every push against **PHP 8.3, 8.4 and 8.5**:
 
 ```sh
-php tests/run.php        # 104 checks: parsers, chart geometry, insights, escaping
+php tests/run.php        # 106 checks: parsers, chart geometry, insights, escaping
 python3 tests/test_http.py # 65 checks: real HTTP, auth, MCP, install
 ```
 
