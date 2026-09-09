@@ -176,4 +176,27 @@ preg_match('/rect class="col-track" x="([\d.]+)" y="1" width="([\d.]+)"/', $sing
 check((float) $bar[2] <= 9.0, 'A single core does not draw a full-width slab');
 check(abs((float) $bar[1] + (float) $bar[2] / 2 - 50.0) < 0.01, 'A single bar is centred');
 
+// --- the published contract must match the code -----------------------------
+// llms.txt and the OpenAPI description are what an agent reads before it ever
+// calls Alo. They drifted once already; this fails the build if they do again.
+$source = file_get_contents(dirname(__DIR__) . '/alo.php');
+preg_match("/!in_array\(\\\$_GET\['format'\], \[([^\]]+)\]/", $source, $accepted);
+$formats = array_map(static fn (string $f): string => trim($f, " '"), explode(',', $accepted[1]));
+sort($formats);
+check($formats === ['html', 'json', 'manifest', 'mcp', 'metrics'], 'Accepted formats are what we think they are');
+
+$builder = file_get_contents(dirname(__DIR__) . '/site/build.sh');
+preg_match('/"enum": \[([^\]]*"metrics"[^\]]*)\]/', $builder, $documented);
+$published = array_map(static fn (string $f): string => trim($f, ' "'), explode(',', $documented[1] ?? ''));
+$published[] = 'mcp';   // documented as its own OpenAPI path
+sort($published);
+check($published === $formats, 'OpenAPI documents every format the code accepts');
+
+$llms = file_get_contents(dirname(__DIR__) . '/llms.txt');
+foreach ($formats as $format) {
+    check(str_contains($llms, 'format=' . $format), "llms.txt lists format=$format");
+}
+check(str_contains($llms, 'sample=') && str_contains($llms, 'fields='), 'llms.txt lists the query parameters');
+check(str_contains($builder, '"name": "sample"') && str_contains($builder, '"name": "fields"'), 'OpenAPI documents the query parameters');
+
 echo "$count checks passed.\n";
