@@ -167,4 +167,8 @@ check($seg[1] !== [] && abs(array_sum(array_map('floatval', $seg[1])) - 100.0) <
 check(str_contains($out, 'Nice</li>') || str_contains($out, '>Nice '), 'Nice appears in the legend');
 check(str_contains($out, 'no kernel ceiling'), 'Unbounded descriptor limit is described, not printed as a sentinel');
 
+check(Alo\ratio(1027, 1000) === 102.7, 'Overcommit is reported above 100%');
+check(Alo\percent(1027, 1000) === 100.0, 'Gauges still clamp to 100%');
+check(Alo\ratio(1, 0) === null && Alo\ratio(null, 5) === null, 'Ratio guards missing data');
+
 echo "$count checks passed.\n";
