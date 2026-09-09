@@ -146,4 +146,25 @@ check(Alo\insights($base + ['x' => 1]) !== [], 'Insights tolerate partial report
 $partial = Alo\withDefaults(['memory' => [], 'runtime' => []]);
 check($partial['kernel']['open_files'] === null && $partial['sockets']['tcp_in_use'] === null, 'Defaults fill missing families');
 
+// --- the CPU bar must account for every /proc/stat field ---------------------
+$niced = "cpu  0 0 0 0 0 0 0 0\n";
+$after = "cpu  1 90 4 1 1 1 1 1\n";
+$nb = Alo\cpuBreakdown($niced, $after);
+check(abs(array_sum(array_values($nb)) - 100.0) < 0.5, 'Breakdown fields sum to 100%');
+check($nb['nice_percent'] === 90.0, 'Niced time is measured');
+$rep = Alo\withDefaults(['cpu' => ['busy_percent' => 99.0, 'breakdown' => $nb, 'per_core' => [], 'load_1m' => 0, 'load_5m' => 0, 'load_15m' => 0, 'logical_cores' => 1, 'sample_ms' => 100, 'model' => 'x'],
+    'memory' => ['total_bytes' => 100.0, 'used_bytes' => 50.0, 'used_percent' => 50.0, 'available_bytes' => 50.0, 'swap_total_bytes' => 0, 'swap_used_bytes' => 0, 'swap_used_percent' => null],
+    'disk' => ['used_percent' => 10.0, 'free_bytes' => 1.0, 'total_bytes' => 2.0, 'used_bytes' => 1.0],
+    'runtime' => ['php_version' => '8.4.0', 'sapi' => 'cli', 'os_family' => 'Linux', 'architecture_bits' => 64,
+        'settings' => [], 'extensions' => [], 'database_drivers' => [], 'process_memory_bytes' => 1, 'process_peak_bytes' => 1,
+        'support' => Alo\supportStatus('8.4.0', '2026-09-09')],
+    'web_server' => ['family' => 'Nginx', 'php_handler' => 'fpm-fcgi'], 'network' => [], 'opcache' => ['enabled' => false],
+    'uptime_seconds' => 10.0, 'collected_at' => 'now', 'collection_ms' => 1.0, 'insights' => []]);
+ob_start(); Alo\render($rep, 'n'); $out = ob_get_clean();
+preg_match('/<svg class="stack".*?<\/svg>/s', $out, $firstBar);
+preg_match_all('/width="([\d.]+)"/', $firstBar[0] ?? '', $seg);
+check($seg[1] !== [] && abs(array_sum(array_map('floatval', $seg[1])) - 100.0) < 0.5, 'Rendered CPU bar covers the full width');
+check(str_contains($out, 'Nice</li>') || str_contains($out, '>Nice '), 'Nice appears in the legend');
+check(str_contains($out, 'no kernel ceiling'), 'Unbounded descriptor limit is described, not printed as a sentinel');
+
 echo "$count checks passed.\n";
